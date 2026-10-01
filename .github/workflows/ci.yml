@@ -24,7 +24,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: '20'
+          node-version-file: apps/dbd-bot/.nvmrc
           cache: npm
           cache-dependency-path: apps/dbd-bot/package-lock.json
       - run: npm ci
