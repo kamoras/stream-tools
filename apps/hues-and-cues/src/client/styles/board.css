@@ -1,0 +1,115 @@
+.board {
+  --label-size: 1.6em;
+  display: grid;
+  grid-template-columns: var(--label-size) repeat(var(--columns), minmax(0, 1fr));
+  grid-template-rows: var(--label-size) repeat(var(--rows), minmax(0, 1fr));
+  gap: 2px;
+  width: 100%;
+  aspect-ratio: calc(var(--columns) + 1) / calc(var(--rows) + 1);
+  user-select: none;
+}
+
+.board__label {
+  display: grid;
+  place-items: center;
+  font-size: 0.75em;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.board__cell {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  font: inherit;
+  font-size: 0.7em;
+  font-weight: 800;
+  line-height: 1;
+  transition: transform 150ms ease;
+}
+
+button.board__cell {
+  cursor: default;
+}
+
+.board--clickable button.board__cell {
+  cursor: crosshair;
+}
+
+.board--clickable button.board__cell:hover {
+  transform: scale(1.25);
+  z-index: 2;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.5);
+}
+
+/* A guess marker: a ring the colour of the opposing contrast. */
+.board__cell--guessed::before {
+  content: '';
+  position: absolute;
+  inset: 18%;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  background: rgb(0 0 0 / 0.15);
+  animation: marker-in 240ms ease-out;
+}
+
+.board__cell--card {
+  z-index: 1;
+  box-shadow:
+    0 0 0 2px #fff,
+    0 0 0 4px #000;
+}
+
+.board__cell--target {
+  z-index: 3;
+  box-shadow:
+    0 0 0 3px #fff,
+    0 0 0 6px #000,
+    0 0 18px 6px rgb(255 255 255 / 0.6);
+  animation: target-pulse 1.4s ease-in-out infinite;
+}
+
+.board__frame {
+  position: relative;
+  z-index: 2;
+  margin: -2px;
+  pointer-events: none;
+  border-radius: 6px;
+}
+
+.board__frame--r1 {
+  border: 3px solid #fff;
+  box-shadow: 0 0 0 2px #000;
+}
+
+.board__frame--r2 {
+  border: 3px dashed rgb(255 255 255 / 0.85);
+  box-shadow: 0 0 0 2px rgb(0 0 0 / 0.6);
+}
+
+@keyframes marker-in {
+  from {
+    transform: scale(0.2);
+    opacity: 0;
+  }
+}
+
+@keyframes target-pulse {
+  50% {
+    transform: scale(1.15);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .board__cell,
+  .board__cell--guessed::before,
+  .board__cell--target {
+    animation: none;
+    transition: none;
+  }
+}

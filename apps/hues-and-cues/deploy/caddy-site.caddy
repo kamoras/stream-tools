@@ -1,0 +1,10 @@
+# Installed by the deploy workflow as /opt/caddy/sites/hues-and-cues.caddy and
+# imported by the shared Caddy. __DOMAIN__ is replaced with the DOMAIN secret.
+__DOMAIN__ {
+	encode zstd gzip
+	reverse_proxy hues-and-cues:8080
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+}

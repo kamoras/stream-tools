@@ -1,0 +1,35 @@
+# systemd unit for running without Docker.
+#   sudo cp deploy/hues-and-cues.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now hues-and-cues
+[Unit]
+Description=Hues and Cues for Twitch
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hues
+Group=hues
+WorkingDirectory=/opt/hues-and-cues-twitch
+EnvironmentFile=-/etc/hues-and-cues.env
+Environment=NODE_ENV=production
+Environment=DATA_DIR=/var/lib/hues-and-cues
+StateDirectory=hues-and-cues
+ExecStart=/usr/bin/node --enable-source-maps dist/node/server/index.js
+Restart=on-failure
+RestartSec=5
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

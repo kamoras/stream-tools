@@ -1,0 +1,52 @@
+@import url('./control.css');
+
+.landing__main {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 14vh 24px 48px;
+  text-align: center;
+}
+
+.landing__title {
+  font-size: clamp(3rem, 9vw, 5.5rem);
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  background: var(--rainbow);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.landing__title span {
+  color: var(--text-muted);
+  -webkit-text-fill-color: var(--text-muted);
+}
+
+.landing__lead {
+  font-size: 1.2rem;
+  color: var(--text-muted);
+  margin-bottom: 2em;
+}
+
+.landing__lead kbd {
+  padding: 0.1em 0.4em;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+}
+
+.landing__steps {
+  max-width: 520px;
+  margin: 3em auto 0;
+  padding-left: 1.2em;
+  text-align: left;
+  line-height: 1.8;
+  color: var(--text-muted);
+}
+
+.landing__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+}
