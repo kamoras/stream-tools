@@ -28,7 +28,7 @@ on; only the dashboard holds all of them (`env/internal-admin.env`).
 | `docker-compose.yml`, `caddy/`, `sites-available/`, `scripts/` | Copied from `infra/` on every deploy  |
 | `env/*.env`                        | Per-app configuration, written from GitHub secrets on every deploy     |
 | `env/internal-*.env`               | Internal API tokens, generated once on the server; never in GitHub     |
-| `deploy.log`                       | Output of the latest `deploy.sh` run                                   |
+| `deploy.log`, `.deploy.lock`       | Output of the latest `deploy.sh` run; lock allowing one run at a time  |
 | `caddy/sites/`                     | Sites currently published (managed by `deploy.sh`)                     |
 | `data/dbd-bot/`                    | Bot database (`bot.db`)                                                |
 | `data/hues-and-cues/`              | Hues & Cues database (`hues.db`)                                       |

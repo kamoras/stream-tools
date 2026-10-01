@@ -8,7 +8,7 @@ import {
   type ScryptParams,
   verifyPassword,
 } from './passwords.js';
-import type { ResolvedSession, SessionRepository } from './session-repository.js';
+import type { SessionRepository } from './session-repository.js';
 import {
   normalizeUsername,
   type User,
@@ -171,11 +171,6 @@ export class AuthService {
 
   public resolveSession(token: string | undefined): User | undefined {
     return token ? this.sessions.resolve(token) : undefined;
-  }
-
-  /** Like {@link resolveSession}, also reporting whether the session was extended. */
-  public resolveSessionDetailed(token: string): ResolvedSession | undefined {
-    return this.sessions.resolveDetailed(token);
   }
 
   public logout(token: string | undefined): void {

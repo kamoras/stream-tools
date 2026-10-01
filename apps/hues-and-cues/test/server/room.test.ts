@@ -97,6 +97,15 @@ describe('Room', () => {
     expect(overlay.last?.totalGuesses).toBe(0);
   });
 
+  it('resends the current state to an attached client only', () => {
+    const before = overlay.states.length;
+    room.resendState(overlay);
+    expect(overlay.states.length).toBe(before + 1);
+    const stranger = new RecordingClient('overlay');
+    room.resendState(stranger);
+    expect(stranger.messages).toEqual([]);
+  });
+
   it('closes every client on closeAll', () => {
     room.closeAll(4404, 'Game deleted');
     expect(host.closed).toEqual({ code: 4404, reason: 'Game deleted' });

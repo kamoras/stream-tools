@@ -16,12 +16,6 @@ interface SessionRow {
   expires_at: number;
 }
 
-export interface ResolvedSession {
-  readonly user: User;
-  /** True when this lookup extended the expiry, so the cookie should be re-issued. */
-  readonly renewed: boolean;
-}
-
 /** Writes to `last_seen_at` are batched to at most once per this interval. */
 const TOUCH_INTERVAL_MS = 60 * 60 * 1000;
 
@@ -57,11 +51,6 @@ export class SessionRepository {
 
   /** Returns the session's user, extending the session, or `undefined` if invalid. */
   public resolve(token: string): User | undefined {
-    return this.resolveDetailed(token)?.user;
-  }
-
-  /** Like {@link resolve}, also reporting whether the expiry was extended. */
-  public resolveDetailed(token: string): ResolvedSession | undefined {
     const tokenHash = hashToken(token);
     const row = this.db
       .prepare<[string], SessionRow>(
@@ -78,16 +67,12 @@ export class SessionRepository {
       this.db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(tokenHash);
       return undefined;
     }
-    const renewed = now - row.last_seen_at >= TOUCH_INTERVAL_MS;
-    if (renewed) {
+    if (now - row.last_seen_at >= TOUCH_INTERVAL_MS) {
       this.db
         .prepare('UPDATE sessions SET last_seen_at = ?, expires_at = ? WHERE token_hash = ?')
         .run(now, now + this.ttlMs, tokenHash);
     }
-    return {
-      user: { id: row.user_id, username: row.username, createdAt: row.user_created_at },
-      renewed,
-    };
+    return { id: row.user_id, username: row.username, createdAt: row.user_created_at };
   }
 
   public revoke(token: string): void {

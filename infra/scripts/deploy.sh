@@ -25,6 +25,16 @@ readonly HEALTH_TIMEOUT_SECONDS=180
 # file after its stdout pipe closes. A half-finished migration can then still
 # roll back. The latest run's output is kept in deploy.log.
 trap '' HUP PIPE
+
+# One run at a time: a run left going by a cancelled job must finish before the
+# next starts, or two migrations could race. Taken before the log is opened so
+# a waiting run can't truncate the running one's log.
+exec 9>"$ROOT/.deploy.lock"
+if ! flock -w 1200 9; then
+  printf 'ERROR: another deploy.sh run is still in progress\n' >&2
+  exit 1
+fi
+
 exec > >(tee --output-error=warn-nopipe "$ROOT/deploy.log") 2>&1
 TEE_PID=$!
 

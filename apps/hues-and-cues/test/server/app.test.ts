@@ -262,12 +262,16 @@ describe('HTTP + WebSocket API', () => {
       expect(login.statusCode).toBe(200);
       const session = login.cookies[0];
       const cookie = `${session?.name ?? ''}=${session?.value ?? ''}`;
-      expect((await call('GET', '/api/auth/me', undefined, cookie)).json()).toEqual({
-        user: { id: 1, username: 'carol' },
-      });
+      const me = await call('GET', '/api/auth/me', undefined, cookie);
+      expect(me.json()).toEqual({ user: { id: 1, username: 'carol' } });
+      // The cookie slides with use.
+      expect(me.cookies).toMatchObject([{ name: 'hc_session', value: session?.value, maxAge: 60 }]);
 
       const logout = await call('POST', '/api/auth/logout', undefined, cookie);
       expect(logout.statusCode).toBe(204);
+      // Only the clearing cookie is sent, not a re-issued one.
+      expect(logout.cookies).toHaveLength(1);
+      expect(logout.cookies[0]?.value).toBe('');
       expect((await call('GET', '/api/auth/me', undefined, cookie)).statusCode).toBe(401);
     });
 

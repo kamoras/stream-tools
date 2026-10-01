@@ -246,6 +246,11 @@ export class Room {
     );
   }
 
+  /** Sends the current state to one client (e.g. after it skipped updates). */
+  public resendState(client: RoomClient): void {
+    if (this.clients.has(client)) this.sendState(client, this.now());
+  }
+
   private sendState(client: RoomClient, now: number): void {
     client.send(this.stateMessage(client.role, now));
   }

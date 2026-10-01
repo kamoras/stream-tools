@@ -82,8 +82,19 @@ export async function buildAdminApp(deps: AdminAppDependencies): Promise<Fastify
       },
     },
     crossOriginEmbedderPolicy: false,
-    referrerPolicy: { policy: 'no-referrer' },
+    // Not `no-referrer`: under it browsers send `Origin: null` on same-origin
+    // form posts, which the CSRF check rightly rejects. `same-origin` still
+    // keeps the Referer (and the secret path in it) from other sites.
+    referrerPolicy: { policy: 'same-origin' },
   });
+  // The Twitch connect form posts an empty urlencoded body; nothing reads it.
+  app.addContentTypeParser(
+    'application/x-www-form-urlencoded',
+    { parseAs: 'string', bodyLimit: 1024 },
+    (_request, _body, done) => {
+      done(null, {});
+    },
+  );
   await app.register(fastifyCookie);
   await app.register(fastifyRateLimit, { global: false });
 

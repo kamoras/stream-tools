@@ -164,15 +164,6 @@ describe('AuthService', () => {
     expect(codes.filter((c) => c === 'throttled')).toHaveLength(3);
   });
 
-  it('reports when a session slides, so the cookie can be re-issued', async () => {
-    const auth = createService();
-    const { sessionToken } = await auth.register('kim', 'right password', invite());
-    expect(auth.resolveSessionDetailed(sessionToken)?.renewed).toBe(false);
-    clock.advance(2 * HOUR);
-    expect(auth.resolveSessionDetailed(sessionToken)?.renewed).toBe(true);
-    expect(auth.resolveSessionDetailed(sessionToken)?.renewed).toBe(false);
-  });
-
   it('upgrades weak password hashes on login', async () => {
     const weak = await hashPassword('old password', { N: 2 ** 9, r: 8, p: 1 });
     const { id } = users.create('erin', weak);

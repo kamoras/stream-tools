@@ -55,6 +55,9 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
       },
     },
     crossOriginEmbedderPolicy: false,
+    // Not the default `no-referrer`: under it the Fetch spec has browsers send
+    // `Origin: null` on same-origin POSTs, which the CSRF check rejects.
+    referrerPolicy: { policy: 'same-origin' },
   });
   await app.register(fastifyCookie);
   await app.register(fastifyRateLimit, { global: false });
@@ -71,11 +74,18 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
     const token = request.cookies[cookieName];
     if (token) {
       request.sessionToken = token;
-      const session = auth.resolveSessionDetailed(token);
-      request.user = session?.user ?? null;
-      // Re-issue the cookie when the session slides, so the browser's copy
-      // lives as long as the server-side session.
-      if (session?.renewed === true) setSessionCookie(reply, token, cookies);
+      request.user = auth.resolveSession(token) ?? null;
+      // Re-issue the cookie on every signed-in page or API response, so the
+      // browser's copy slides with the server-side session. (Not on WebSocket
+      // upgrades, whose 101 response never carries these headers, nor on
+      // static assets; the control page also pings /api/auth/me hourly.)
+      if (
+        request.user !== null &&
+        request.headers.upgrade === undefined &&
+        !request.url.startsWith('/assets/')
+      ) {
+        setSessionCookie(reply, token, cookies);
+      }
     }
     return undefined;
   });

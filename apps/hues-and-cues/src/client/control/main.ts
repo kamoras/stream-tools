@@ -28,8 +28,18 @@ import { lastRoom, overlayUrl } from './session.js';
 import { toast } from './toast.js';
 
 const app = requireElement('#app', HTMLElement);
+const KEEPALIVE_INTERVAL_MS = 60 * 60 * 1000;
 
 void boot();
+
+// A control page left open for days (e.g. an OBS dock) talks only over the
+// WebSocket, whose upgrade can't refresh the session cookie. Touch the API
+// now and then so the cookie keeps sliding with the server-side session.
+window.setInterval(() => {
+  api.me().catch((error: unknown) => {
+    if (error instanceof ApiError && error.status === 401) redirectToLogin();
+  });
+}, KEEPALIVE_INTERVAL_MS);
 
 async function boot(): Promise<void> {
   try {

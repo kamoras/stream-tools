@@ -243,8 +243,18 @@ describe('admin dashboard', () => {
   });
 
   describe('Twitch chat login', () => {
+    /** Posts exactly what the dashboard's <form method=post> sends. */
     const connect = async (cookie: string): Promise<URL> => {
-      const response = await call('POST', `${BASE}/twitch-connect`, cookie);
+      const response = await app.inject({
+        method: 'POST',
+        url: `${BASE}/twitch-connect`,
+        headers: {
+          ...ORIGIN,
+          cookie,
+          'content-type': 'application/x-www-form-urlencoded',
+        },
+        payload: '',
+      });
       expect(response.statusCode).toBe(303);
       return new URL(String(response.headers.location));
     };
@@ -259,6 +269,12 @@ describe('admin dashboard', () => {
       expect(location.searchParams.get('scope')).toBe('chat:read chat:edit');
       expect(location.searchParams.get('force_verify')).toBe('true');
       expect(location.searchParams.get('state')).toMatch(/^[0-9a-f]{32}$/u);
+    });
+
+    it('lets browsers send a real Origin on the connect form', async () => {
+      // Under `no-referrer` the form would post `Origin: null` and be blocked.
+      const page = await call('GET', `${BASE}/`);
+      expect(page.headers['referrer-policy']).toBe('same-origin');
     });
 
     it('hands a valid code to the bot once', async () => {
@@ -310,6 +326,13 @@ describe('admin dashboard', () => {
         headers: { origin: 'https://evil.example', host: 'localhost', cookie },
       });
       expect(crossSite.statusCode).toBe(403);
+      // Browsers send `Origin: null` for form posts under `no-referrer`.
+      const nullOrigin = await app.inject({
+        method: 'POST',
+        url: `${BASE}/twitch-connect`,
+        headers: { origin: 'null', host: 'localhost', cookie },
+      });
+      expect(nullOrigin.statusCode).toBe(403);
       expect((await call('GET', `${BASE}/twitch-connect`, cookie)).statusCode).toBe(404);
       expect(bot.calls).toEqual([]);
     });

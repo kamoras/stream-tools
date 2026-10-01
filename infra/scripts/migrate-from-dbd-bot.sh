@@ -61,6 +61,11 @@ migrate_from_dbd_bot() {
 }
 
 finish_migration() {
+  if [[ ! -d "$LEGACY_DIR" ]]; then
+    # Nothing to roll back to; leave the healthy new stack running.
+    MIGRATING=0
+    fail "$LEGACY_DIR disappeared during the migration; check the server by hand"
+  fi
   date -u +%Y-%m-%dT%H:%M:%SZ >"$MIGRATION_MARKER"
   mv "$LEGACY_DIR" "$LEGACY_BACKUP_DIR"
   # The old .env holds every secret and was written with the default umask.

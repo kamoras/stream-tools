@@ -49,8 +49,10 @@ can't slip past the limit.
 
 A session is a random 256-bit token held in an `HttpOnly`, `SameSite=Lax` cookie, marked `Secure`
 with the `__Host-` prefix in production. The server stores only its SHA-256 hash, and expiry slides
-forward as the session is used (at most hourly); the cookie is re-issued whenever it does, so the
-browser keeps it as long as the server does. Changing the password revokes every other session.
+forward as the session is used (at most hourly). Every signed-in page or API response re-issues
+the cookie, and the control page calls the API hourly (a page left open, such as an OBS dock,
+otherwise talks only over its WebSocket), so the browser keeps the cookie as long as the server
+keeps the session. Changing the password revokes every other session.
 
 **Cross-site protection.** State-changing requests must carry an `Origin` header matching the
 server, on top of `SameSite` cookies. WebSocket upgrades for the host role are checked the same way,

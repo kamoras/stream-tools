@@ -20,8 +20,13 @@ import { isSameOrigin } from './request-context.js';
 export const MAX_WS_PAYLOAD_BYTES = 16 * 1024;
 const HELLO_TIMEOUT_MS = 10_000;
 const HEARTBEAT_INTERVAL_MS = 30_000;
-/** Game-state updates are skipped for a socket this far behind; the next one catches it up. */
+/**
+ * Game-state updates are skipped for a socket this far behind (each state is
+ * complete, so only the latest matters); it gets the current state once its
+ * buffer drains.
+ */
 const MAX_BUFFERED_BYTES = 1024 * 1024;
+const DRAIN_CHECK_MS = 250;
 
 /**
  * Rooms send the same message object to every client of a role, so cache the
@@ -76,8 +81,27 @@ export function registerWsGateway(app: FastifyInstance, options: WsGatewayOption
 
     const send = (message: ServerMessage): void => {
       if (socket.readyState !== socket.OPEN) return;
-      if (message.type === 'state' && socket.bufferedAmount > MAX_BUFFERED_BYTES) return;
+      if (message.type === 'state') {
+        if (socket.bufferedAmount > MAX_BUFFERED_BYTES) {
+          staleState = true;
+          scheduleCatchUp();
+          return;
+        }
+        staleState = false;
+      }
       socket.send(serialize(message));
+    };
+    let staleState = false;
+    let drainTimer: NodeJS.Timeout | null = null;
+    /** Sends the current state once a backed-up socket has drained. */
+    const scheduleCatchUp = (): void => {
+      if (drainTimer !== null) return;
+      drainTimer = setTimeout(() => {
+        drainTimer = null;
+        if (!staleState || session === null) return;
+        if (socket.bufferedAmount > MAX_BUFFERED_BYTES) scheduleCatchUp();
+        else session.room.resendState(session.client);
+      }, DRAIN_CHECK_MS);
     };
     /** Whether a host connection's sign-in is still valid and still owns its room. */
     const hostStillAuthorized = (room: Room): boolean => {
@@ -189,6 +213,7 @@ export function registerWsGateway(app: FastifyInstance, options: WsGatewayOption
     socket.on('close', () => {
       clearTimeout(helloTimer);
       clearInterval(heartbeat);
+      if (drainTimer !== null) clearTimeout(drainTimer);
       if (session) {
         session.room.detach(session.client);
         chat.release(session.room.channel);
