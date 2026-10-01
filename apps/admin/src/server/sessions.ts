@@ -23,10 +23,11 @@ function digest(value: string): Buffer {
 }
 
 /**
- * The single admin login. The password is compared in constant time; failures
- * are throttled globally (there is one account); sessions are random 256-bit
- * tokens kept in memory with an 8-hour lifetime. Restarting the dashboard
- * signs the admin out, which is acceptable for a single operator.
+ * The single admin login. The password is compared in constant time; failed
+ * attempts are throttled per client IP, so a stranger can't lock the admin
+ * out. Sessions are random 256-bit tokens kept (hashed) in memory with an
+ * 8-hour lifetime; restarting the dashboard signs the admin out, which is
+ * acceptable for a single operator.
  */
 export class AdminSessions {
   private readonly passwordDigest: Buffer;
@@ -35,7 +36,7 @@ export class AdminSessions {
   private readonly failureWindowMs: number;
   private readonly now: () => number;
   private readonly sessions = new Map<string, number>();
-  private failures: number[] = [];
+  private readonly failures = new Map<string, number[]>();
 
   public constructor(options: AdminSessionsOptions) {
     this.passwordDigest = digest(options.password);
@@ -50,21 +51,21 @@ export class AdminSessions {
   }
 
   /** Returns a new session token, or throws {@link LoginError}. */
-  public login(password: string): string {
+  public login(password: string, clientKey = 'unknown'): string {
     const now = this.now();
-    this.failures = this.failures.filter((at) => at > now - this.failureWindowMs);
-    if (this.failures.length >= this.maxFailures) {
-      const oldest = this.failures[0] ?? now;
+    const recent = this.recentFailures(clientKey, now);
+    if (recent.length >= this.maxFailures) {
+      const oldest = recent[0] ?? now;
       throw new LoginError(
         'Too many failed attempts. Try again later.',
         Math.max(1, Math.ceil((oldest + this.failureWindowMs - now) / 1000)),
       );
     }
     if (!timingSafeEqual(digest(password), this.passwordDigest)) {
-      this.failures.push(now);
+      this.failures.set(clientKey, [...recent, now]);
       throw new LoginError('Incorrect password.');
     }
-    this.failures = [];
+    this.failures.delete(clientKey);
     const token = randomBytes(32).toString('base64url');
     this.sessions.set(digest(token).toString('hex'), now + this.ttlMs);
     return token;
@@ -86,8 +87,19 @@ export class AdminSessions {
     if (token) this.sessions.delete(digest(token).toString('hex'));
   }
 
+  /** Drops expired sessions and stale failure records so memory stays bounded. */
   public prune(): void {
     const now = this.now();
     for (const [key, expiresAt] of this.sessions) if (expiresAt <= now) this.sessions.delete(key);
+    for (const key of [...this.failures.keys()]) this.recentFailures(key, now);
+  }
+
+  private recentFailures(clientKey: string, now: number): number[] {
+    const recent = (this.failures.get(clientKey) ?? []).filter(
+      (at) => at > now - this.failureWindowMs,
+    );
+    if (recent.length === 0) this.failures.delete(clientKey);
+    else this.failures.set(clientKey, recent);
+    return recent;
   }
 }

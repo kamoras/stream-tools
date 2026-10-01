@@ -88,7 +88,11 @@ async function main(): Promise<void> {
     forceExit.unref();
 
     clearInterval(maintenanceTimer);
+    // Persist game state first, so a slow close can't lose it to the force-exit timer.
+    registry.flush();
     chat.stop();
+    // Drop WebSocket clients without waiting for close handshakes; they reconnect to the new process.
+    for (const client of app.websocketServer.clients) client.terminate();
     await app.close();
     await internalApi?.close();
     registry.shutdown();

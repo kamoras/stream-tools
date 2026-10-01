@@ -10,6 +10,8 @@ import { parseChatGuess } from '../twitch/guess-parser.js';
 export interface RoomClient {
   readonly role: ClientRole;
   send(message: ServerMessage): void;
+  /** Disconnects the client, e.g. when the room is deleted. */
+  close(code: number, reason: string): void;
 }
 
 export interface RoomOptions {
@@ -90,7 +92,9 @@ export class Room {
   public attach(client: RoomClient): void {
     this.clients.add(client);
     this.touch();
-    this.sendState(client);
+    // Persist lastActiveAt, which drives ordering and retention pruning.
+    this.onChange(this);
+    this.sendState(client, this.now());
   }
 
   public detach(client: RoomClient): void {
@@ -146,6 +150,8 @@ export class Room {
   /** Feeds a chat message from this room's channel into the game. */
   public handleChat(message: ChatMessage): void {
     if (this.engine.currentPhase !== 'guessing') return;
+    // The broadcaster can see the target on the control page, so their guesses don't count.
+    if (message.login.toLowerCase() === this.channel.toLowerCase()) return;
     const coord = parseChatGuess(message.text, this.engine.currentSettings.requireGuessCommand);
     if (coord === null) return;
     this.recordGuess(
@@ -156,6 +162,11 @@ export class Room {
         coord,
       }),
     );
+  }
+
+  /** Disconnects every client (they then detach themselves). */
+  public closeAll(code: number, reason: string): void {
+    for (const client of [...this.clients]) client.close(code, reason);
   }
 
   public dispose(): void {
@@ -172,8 +183,18 @@ export class Room {
       clearTimeout(this.broadcastTimer);
       this.broadcastTimer = null;
     }
-    this.lastBroadcastAt = this.now();
-    for (const client of this.clients) this.sendState(client);
+    const now = this.now();
+    this.lastBroadcastAt = now;
+    // Build each role's message once, however many clients are attached.
+    const messages = new Map<ClientRole, ServerMessage>();
+    for (const client of this.clients) {
+      let message = messages.get(client.role);
+      if (!message) {
+        message = this.stateMessage(client.role, now);
+        messages.set(client.role, message);
+      }
+      client.send(message);
+    }
   }
 
   public sendToAll(message: ServerMessage): void {
@@ -225,18 +246,14 @@ export class Room {
     );
   }
 
-  private sendState(client: RoomClient): void {
-    const serverTime = this.now();
-    if (client.role === 'host') {
-      client.send({ type: 'state', role: 'host', state: this.engine.getHostState(), serverTime });
-    } else {
-      client.send({
-        type: 'state',
-        role: 'overlay',
-        state: this.engine.getPublicState(),
-        serverTime,
-      });
-    }
+  private sendState(client: RoomClient, now: number): void {
+    client.send(this.stateMessage(client.role, now));
+  }
+
+  private stateMessage(role: ClientRole, serverTime: number): ServerMessage {
+    return role === 'host'
+      ? { type: 'state', role: 'host', state: this.engine.getHostState(), serverTime }
+      : { type: 'state', role: 'overlay', state: this.engine.getPublicState(), serverTime };
   }
 
   private touch(): void {

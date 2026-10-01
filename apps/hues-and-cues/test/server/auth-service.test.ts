@@ -138,6 +138,41 @@ describe('AuthService', () => {
     expect(error.retryAfterSeconds).toBeGreaterThan(0);
   });
 
+  it('throttles per client, so one attacker cannot lock the owner out', async () => {
+    const auth = createService();
+    await auth.register('ivy', 'right password', invite());
+    for (let i = 0; i < 3; i += 1) {
+      await expect(auth.login('ivy', 'nope', '203.0.113.9')).rejects.toMatchObject({
+        code: 'invalid_credentials',
+      });
+    }
+    await expect(auth.login('ivy', 'right password', '203.0.113.9')).rejects.toMatchObject({
+      code: 'throttled',
+    });
+    await expect(auth.login('ivy', 'right password', '198.51.100.1')).resolves.toBeDefined();
+  });
+
+  it('counts concurrent attempts before hashing', async () => {
+    const auth = createService();
+    await auth.register('jo', 'right password', invite());
+    const results = await Promise.allSettled(
+      Array.from({ length: 6 }, () => auth.login('jo', 'nope', '203.0.113.9')),
+    );
+    const codes = results.map((r) =>
+      r.status === 'rejected' ? (r.reason as AuthError).code : 'ok',
+    );
+    expect(codes.filter((c) => c === 'throttled')).toHaveLength(3);
+  });
+
+  it('reports when a session slides, so the cookie can be re-issued', async () => {
+    const auth = createService();
+    const { sessionToken } = await auth.register('kim', 'right password', invite());
+    expect(auth.resolveSessionDetailed(sessionToken)?.renewed).toBe(false);
+    clock.advance(2 * HOUR);
+    expect(auth.resolveSessionDetailed(sessionToken)?.renewed).toBe(true);
+    expect(auth.resolveSessionDetailed(sessionToken)?.renewed).toBe(false);
+  });
+
   it('upgrades weak password hashes on login', async () => {
     const weak = await hashPassword('old password', { N: 2 ** 9, r: 8, p: 1 });
     const { id } = users.create('erin', weak);
@@ -152,7 +187,7 @@ describe('AuthService', () => {
 
     await expect(
       auth.changePassword(first.user.id, 'not it', 'second password', first.sessionToken),
-    ).rejects.toMatchObject({ code: 'invalid_credentials' });
+    ).rejects.toMatchObject({ code: 'wrong_password' });
 
     await auth.changePassword(
       first.user.id,

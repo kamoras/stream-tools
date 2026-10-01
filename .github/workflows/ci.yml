@@ -103,7 +103,7 @@ jobs:
         working-directory: infra
         run: |
           mkdir -p env
-          for f in caddy internal dbd-bot hues-and-cues admin; do touch "env/$f.env"; done
+          for f in caddy internal-dbd-bot internal-hues-and-cues internal-admin dbd-bot hues-and-cues admin; do touch "env/$f.env"; done
           docker compose config --quiet
       - name: Caddy config
         run: |

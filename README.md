@@ -54,7 +54,9 @@ cd apps/admin && npm ci && npm run dev
 | `invite.yml` | Manual                  | dbd-bot emergency fallback for generating an invite code on the server                         |
 
 A change confined to `apps/hues-and-cues/` never restarts the bot, and vice versa. Changes to `infra/`
-re-apply configuration (for example Caddy sites) without restarting any app. To redeploy by hand, run
+re-apply configuration (for example Caddy sites); an app is restarted only if its own compose
+service or env file changed, and every running app must pass its health check before a deploy
+succeeds. To redeploy by hand, run
 **Deploy** from the Actions tab with `all`, `none` (configuration only) or a list such as `dbd-bot`.
 
 See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the one-time VM setup and the GitHub secrets each app
@@ -62,11 +64,14 @@ needs.
 
 ### Adding an app
 
-1. Create `apps/<name>/` with a `Dockerfile` whose container listens on port 8080 and defines a
-   health check. If it needs administration, expose an internal admin API on port 9000 that
-   requires `INTERNAL_API_TOKEN`, and add a section for it to `apps/admin`.
-2. Add a service named `<name>` to `infra/docker-compose.yml` with
-   `env_file: [env/internal.env, env/<name>.env]` and `./data/<name>` for persistent data.
+1. Create `apps/<name>/` with a `Dockerfile` whose container listens on port 8080, with a health
+   check in the `Dockerfile` or in its compose service. If it needs administration, expose an
+   internal admin API on port 9000 that requires `INTERNAL_API_TOKEN`, add it to
+   `API_TOKEN_VARS` in `infra/scripts/deploy.sh` (which generates its token), and add a section for
+   it to `apps/admin` that reads the matching token variable.
+2. Add a service named `<name>` to `infra/docker-compose.yml` with `env_file: [env/<name>.env]`
+   (plus `env/internal-<name>.env` if it has an internal API) and `./data/<name>` for persistent
+   data.
 3. Add `infra/sites-available/<name>.caddy` with a `# requires: <DOMAIN_VAR>` header.
 4. Add `<name>` to `ALL_APPS` in `infra/scripts/deploy.sh`, `KNOWN_APPS` and the path filters in
    `.github/workflows/deploy.yml`, the jobs in `ci.yml`, and `.github/dependabot.yml`.

@@ -63,14 +63,16 @@ migrate_from_dbd_bot() {
 finish_migration() {
   date -u +%Y-%m-%dT%H:%M:%SZ >"$MIGRATION_MARKER"
   mv "$LEGACY_DIR" "$LEGACY_BACKUP_DIR"
+  # The old .env holds every secret and was written with the default umask.
+  chmod -R go-rwx "$LEGACY_BACKUP_DIR"
   MIGRATING=0
   log "Migration complete; old deployment kept at $LEGACY_BACKUP_DIR"
 }
 
 rollback_migration() {
   MIGRATING=0
-  printf 'ERROR: migration failed; restoring the previous deployment\n' >&2
+  printf 'ERROR: migration failed; restoring the previous deployment\n' >&2 || true
   compose down || true
   legacy_compose up -d
-  printf 'Previous deployment restored. The new stack was not started.\n' >&2
+  printf 'Previous deployment restored. The new stack was not started.\n' >&2 || true
 }

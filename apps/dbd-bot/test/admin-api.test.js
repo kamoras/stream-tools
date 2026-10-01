@@ -44,6 +44,14 @@ describe('admin API auth', () => {
     assert.equal((await request(api).get('/status')).status, 401);
   });
 
+  it('checks the token before parsing the body, and answers bad JSON with JSON', async () => {
+    const unauth = await request(api).post('/twitch/exchange').set('Content-Type', 'application/json').send('{not json');
+    assert.equal(unauth.status, 401);
+    const bad = await authed(request(api).post('/twitch/exchange')).set('Content-Type', 'application/json').send('{not json');
+    assert.equal(bad.status, 400);
+    assert.deepEqual(bad.body, { error: 'Bad request' });
+  });
+
   it('rejects a wrong token', async () => {
     const res = await request(api).get('/status').set('Authorization', 'Bearer nope');
     assert.equal(res.status, 401);
@@ -139,19 +147,25 @@ describe('invites', () => {
 
 describe('POST /twitch/exchange', () => {
   let originalExchange;
+  let originalValidate;
   let exchangeCalls;
 
   before(() => {
     originalExchange = eventsub.exchangeAuthCode;
+    originalValidate = eventsub.validateUserToken;
     eventsub.exchangeAuthCode = async (opts) => {
       exchangeCalls.push(opts);
       if (opts.code === 'bad') throw new Error('invalid code');
-      return { access_token: 'tok', refresh_token: 'fresh-refresh-token', expires_in: 14400 };
+      const token = opts.code === 'other-account' ? 'tok-other' : 'tok';
+      return { access_token: token, refresh_token: `refresh-for-${opts.code}`, expires_in: 14400 };
     };
+    eventsub.validateUserToken = async (accessToken) =>
+      ({ login: accessToken === 'tok-other' ? 'someone_else' : 'TestBot', user_id: '1' });
   });
 
   after(() => {
     eventsub.exchangeAuthCode = originalExchange;
+    eventsub.validateUserToken = originalValidate;
   });
 
   beforeEach(() => {
@@ -163,11 +177,20 @@ describe('POST /twitch/exchange', () => {
   it('exchanges the code, persists the refresh token and restarts', async () => {
     const res = await authed(request(api).post('/twitch/exchange')).send({ code: 'authcode123', redirectUri });
     assert.equal(res.status, 204);
-    assert.equal(db.getSetting('twitch_refresh_token'), 'fresh-refresh-token');
+    assert.equal(db.getSetting('twitch_refresh_token'), 'refresh-for-authcode123');
     assert.equal(restarted, true);
     assert.deepEqual(exchangeCalls[0], {
       code: 'authcode123', clientId: 'client123', clientSecret: 'secretabc', redirectUri,
     });
+  });
+
+  it('refuses a login for an account other than the bot, without storing it', async () => {
+    const before = db.getSetting('twitch_refresh_token');
+    const res = await authed(request(api).post('/twitch/exchange')).send({ code: 'other-account', redirectUri });
+    assert.equal(res.status, 409);
+    assert.match(res.body.error, /someone_else.*testbot/);
+    assert.equal(db.getSetting('twitch_refresh_token'), before);
+    assert.equal(restarted, false);
   });
 
   it('reports a rejected code without restarting', async () => {

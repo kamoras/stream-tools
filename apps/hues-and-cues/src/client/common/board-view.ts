@@ -27,16 +27,20 @@ export interface BoardRenderModel {
 /**
  * Renders the 30×16 colour board. Cells are created once and updated in
  * place, so re-rendering on every state message is cheap.
+ *
+ * Clickable boards use a roving tab stop: the board is one Tab stop and the
+ * arrow keys (plus Home/End) move between cells, instead of 480 Tab stops.
  */
 export class BoardView {
   public readonly element: HTMLElement;
   private readonly cells: HTMLElement[] = [];
   private readonly frameLayer: HTMLElement[] = [];
+  private focusIndex = 0;
 
   public constructor(options: BoardViewOptions = {}) {
     this.element = h('div', {
       className: 'board',
-      attrs: { role: 'grid', 'aria-label': 'Colour board' },
+      attrs: { role: 'group', 'aria-label': 'Colour board' },
     });
     this.element.style.setProperty('--columns', String(BOARD_COLUMNS));
     this.element.style.setProperty('--rows', String(BOARD_ROWS));
@@ -62,10 +66,9 @@ export class BoardView {
           className: 'board__cell',
           style: { background, color: contrastingTextColor(background) },
           attrs: {
-            role: 'gridcell',
             'aria-label': formatCoord(coord),
             title: formatCoord(coord),
-            ...(clickable ? { type: 'button' } : {}),
+            ...(clickable ? { type: 'button', tabindex: row === 0 && col === 0 ? '0' : '-1' } : {}),
           },
           ...(options.onCellClick ? { on: { click: () => options.onCellClick?.(coord) } } : {}),
         });
@@ -75,6 +78,48 @@ export class BoardView {
         this.element.append(cell);
       }
     }
+    if (options.onCellClick) {
+      this.element.addEventListener('keydown', (event) => {
+        this.handleKey(event);
+      });
+    }
+  }
+
+  private handleKey(event: KeyboardEvent): void {
+    // Start from the focused cell, which a mouse click may have moved.
+    const current = this.cells.indexOf(event.target as HTMLElement);
+    if (current === -1) return;
+    const row = Math.floor(current / BOARD_COLUMNS);
+    const col = current % BOARD_COLUMNS;
+    let next: number;
+    switch (event.key) {
+      case 'ArrowLeft':
+        next = row * BOARD_COLUMNS + Math.max(0, col - 1);
+        break;
+      case 'ArrowRight':
+        next = row * BOARD_COLUMNS + Math.min(BOARD_COLUMNS - 1, col + 1);
+        break;
+      case 'ArrowUp':
+        next = Math.max(0, row - 1) * BOARD_COLUMNS + col;
+        break;
+      case 'ArrowDown':
+        next = Math.min(BOARD_ROWS - 1, row + 1) * BOARD_COLUMNS + col;
+        break;
+      case 'Home':
+        next = row * BOARD_COLUMNS;
+        break;
+      case 'End':
+        next = row * BOARD_COLUMNS + BOARD_COLUMNS - 1;
+        break;
+      default:
+        return;
+    }
+    event.preventDefault();
+    this.cells[this.focusIndex]?.setAttribute('tabindex', '-1');
+    this.focusIndex = next;
+    const cell = this.cells[next];
+    cell?.setAttribute('tabindex', '0');
+    cell?.focus();
   }
 
   public render(model: BoardRenderModel): void {

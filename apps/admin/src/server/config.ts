@@ -19,14 +19,20 @@ const envSchema = z.object({
     .default('admin'),
   /** Public origin the dashboard is served from, e.g. https://bot.example.com. */
   PUBLIC_URL: z.url().refine((url) => !url.endsWith('/'), 'must not end with /'),
-  /** Shared secret presented to each app's internal admin API. */
-  INTERNAL_API_TOKEN: z.string().min(32, 'must be at least 32 characters'),
+  /** Each app's internal admin API token (that app's INTERNAL_API_TOKEN). */
+  DBD_BOT_API_TOKEN: z.string().min(32, 'must be at least 32 characters'),
+  HUES_API_TOKEN: z.string().min(32, 'must be at least 32 characters'),
   DBD_BOT_API_URL: z.url().default('http://dbd-bot:9000'),
   HUES_API_URL: z.url().default('http://hues-and-cues:9000'),
   TRUST_PROXY: booleanString.default(false),
   COOKIE_SECURE: booleanString.optional(),
   PUBLIC_DIR: z.string().default('./dist/public'),
 });
+
+export interface UpstreamConfig {
+  readonly url: string;
+  readonly token: string;
+}
 
 export interface AdminConfig {
   readonly env: 'development' | 'production' | 'test';
@@ -36,8 +42,10 @@ export interface AdminConfig {
   readonly password: string;
   readonly path: string;
   readonly publicUrl: string;
-  readonly internalApiToken: string;
-  readonly upstreams: { readonly 'dbd-bot': string; readonly 'hues-and-cues': string };
+  readonly upstreams: {
+    readonly 'dbd-bot': UpstreamConfig;
+    readonly 'hues-and-cues': UpstreamConfig;
+  };
   readonly trustProxy: boolean;
   readonly cookieSecure: boolean;
   readonly publicDir: string;
@@ -60,8 +68,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AdminConfig {
     password: v.ADMIN_PASSWORD,
     path: v.ADMIN_PATH,
     publicUrl: v.PUBLIC_URL,
-    internalApiToken: v.INTERNAL_API_TOKEN,
-    upstreams: { 'dbd-bot': v.DBD_BOT_API_URL, 'hues-and-cues': v.HUES_API_URL },
+    upstreams: {
+      'dbd-bot': { url: v.DBD_BOT_API_URL, token: v.DBD_BOT_API_TOKEN },
+      'hues-and-cues': { url: v.HUES_API_URL, token: v.HUES_API_TOKEN },
+    },
     trustProxy: v.TRUST_PROXY,
     cookieSecure: v.COOKIE_SECURE ?? v.NODE_ENV === 'production',
     publicDir: resolve(v.PUBLIC_DIR),

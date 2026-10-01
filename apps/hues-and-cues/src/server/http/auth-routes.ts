@@ -19,6 +19,7 @@ import { parseBody } from './validation.js';
 
 const AUTH_ERROR_STATUS: Readonly<Record<AuthErrorCode, number>> = {
   invalid_credentials: 401,
+  wrong_password: 403,
   invalid_invite: 403,
   username_taken: 409,
   throttled: 429,
@@ -77,7 +78,7 @@ export function registerAuthRoutes(
       const body = parseBody(loginRequestSchema, request.body, reply);
       if (!body) return reply;
       try {
-        const { user, sessionToken } = await auth.login(body.username, body.password);
+        const { user, sessionToken } = await auth.login(body.username, body.password, request.ip);
         // Replace any existing session rather than accumulating them.
         auth.logout(request.sessionToken ?? undefined);
         setSessionCookie(reply, sessionToken, cookies);

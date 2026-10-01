@@ -1,8 +1,7 @@
 /**
- * Slows password guessing against a single account, independent of the
- * caller's IP (per-IP limits are applied separately at the HTTP layer).
- * After `maxFailures` failures within `windowMs`, further attempts for that
- * username are refused until the window passes.
+ * Counts failed sign-ins per key (for example username + IP). After
+ * `maxFailures` failures within `windowMs`, further attempts for that key are
+ * refused until the window passes.
  */
 export class LoginThrottle {
   private readonly failures = new Map<string, number[]>();
@@ -25,6 +24,13 @@ export class LoginThrottle {
     const recent = this.recent(key);
     recent.push(this.now());
     this.failures.set(key, recent);
+  }
+
+  /** Removes the most recent failure (an attempt counted up front that succeeded). */
+  public forgiveOne(key: string): void {
+    const recent = this.recent(key);
+    recent.pop();
+    if (recent.length === 0) this.failures.delete(key);
   }
 
   public reset(key: string): void {

@@ -40,6 +40,7 @@ const TWITCH_AUTHORIZE_URL = 'https://id.twitch.tv/oauth2/authorize';
 const TWITCH_STATE_TTL_MS = 10 * 60 * 1000;
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 const CHANNEL = /^[a-z0-9_]{3,25}$/u;
+const PASS_THROUGH_STATUSES = new Set([400, 404, 409]);
 
 const loginSchema = z.object({ password: z.string().min(1).max(1024) });
 const noteSchema = z.object({ note: z.string().trim().max(100).optional() });
@@ -75,8 +76,8 @@ export async function buildAdminApp(deps: AdminAppDependencies): Promise<Fastify
         imgSrc: ["'self'", 'data:'],
         styleSrc: ["'self'"],
         scriptSrc: ["'self'"],
-        // Twitch is the only place the dashboard ever sends the browser.
-        formAction: ["'self'"],
+        // The Twitch connect form posts here, then redirects to Twitch.
+        formAction: ["'self'", 'https://id.twitch.tv'],
         upgradeInsecureRequests: null,
       },
     },
@@ -91,7 +92,10 @@ export async function buildAdminApp(deps: AdminAppDependencies): Promise<Fastify
   );
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof UpstreamError) {
-      const status = error.status >= 400 && error.status < 500 ? error.status : 502;
+      // Pass through only "your request was wrong" answers. Anything else —
+      // notably an app's 401 from a mismatched internal token — is the
+      // dashboard's problem, and must not look like an expired admin session.
+      const status = PASS_THROUGH_STATUSES.has(error.status) ? error.status : 502;
       return reply.status(status).send({ error: error.message });
     }
     const statusCode = (error as { statusCode?: number }).statusCode ?? 500;
@@ -133,6 +137,9 @@ export async function buildAdminApp(deps: AdminAppDependencies): Promise<Fastify
       prefix: `${base}/`,
       index: false,
       wildcard: false,
+      // The page is served only at `${base}/`; a second URL for it would
+      // break its relative API paths.
+      allowedPath: (pathName) => pathName !== '/index.html',
       decorateReply: true,
       setHeaders: (response, filePath) => {
         response.header(
@@ -166,7 +173,7 @@ export async function buildAdminApp(deps: AdminAppDependencies): Promise<Fastify
       const body = loginSchema.safeParse(request.body);
       if (!body.success) return reply.status(400).send({ error: 'Password is required.' });
       try {
-        const token = sessions.login(body.data.password);
+        const token = sessions.login(body.data.password, request.ip);
         void reply.setCookie(cookie, token, {
           httpOnly: true,
           secure: config.cookieSecure,
@@ -245,13 +252,23 @@ export async function buildAdminApp(deps: AdminAppDependencies): Promise<Fastify
     },
   );
 
-  // Twitch chat login for the bot. Same URLs as the bot's old dashboard, so
-  // the redirect URL registered in the Twitch developer console still works.
-  app.get(`${base}/twitch-connect`, async (request, reply) => {
-    if (!signedIn(request)) return reply.redirect(`${base}/`);
-    const status = await bot.request<BotStatus>('GET', '/status');
-    if (!status.twitch.configured || status.twitch.clientId === null) {
-      return reply.redirect(`${base}/?twitch=not-configured`);
+  // Twitch chat login for the bot. The callback URL is the same as the bot's
+  // old dashboard, so the redirect URL registered in the Twitch developer
+  // console still works. Starting the flow is a POST, so the Origin check
+  // above stops other sites from triggering it.
+  app.post(`${base}/twitch-connect`, async (request, reply) => {
+    if (!signedIn(request)) return reply.redirect(`${base}/`, 303);
+    let status: BotStatus;
+    try {
+      status = await bot.request<BotStatus>('GET', '/status');
+    } catch (statusError) {
+      request.log.warn({ err: statusError }, 'Bot unavailable for Twitch connect');
+      return reply.redirect(`${base}/?twitch=unavailable`, 303);
+    }
+    // Defensive: tolerate a malformed status payload rather than throwing.
+    const twitch = (status as Partial<BotStatus>).twitch;
+    if (!twitch?.configured || typeof twitch.clientId !== 'string') {
+      return reply.redirect(`${base}/?twitch=not-configured`, 303);
     }
     const state = randomBytes(16).toString('hex');
     for (const [key, expiresAt] of pendingTwitchStates) {
@@ -259,13 +276,16 @@ export async function buildAdminApp(deps: AdminAppDependencies): Promise<Fastify
     }
     pendingTwitchStates.set(state, now() + TWITCH_STATE_TTL_MS);
     const params = new URLSearchParams({
-      client_id: status.twitch.clientId,
+      client_id: twitch.clientId,
       redirect_uri: twitchCallbackUrl,
       response_type: 'code',
       scope: 'chat:read chat:edit',
       state,
+      // Always show Twitch's consent screen, so the admin sees (and can
+      // switch) which account is being connected.
+      force_verify: 'true',
     });
-    return reply.redirect(`${TWITCH_AUTHORIZE_URL}?${params.toString()}`);
+    return reply.redirect(`${TWITCH_AUTHORIZE_URL}?${params.toString()}`, 303);
   });
 
   app.get<{ Querystring: Record<string, string | undefined> }>(
@@ -283,7 +303,8 @@ export async function buildAdminApp(deps: AdminAppDependencies): Promise<Fastify
         await bot.request('POST', '/twitch/exchange', { code, redirectUri: twitchCallbackUrl });
       } catch (exchangeError) {
         request.log.error({ err: exchangeError }, 'Twitch code exchange failed');
-        return reply.redirect(`${base}/?twitch=failed`);
+        const wrongAccount = exchangeError instanceof UpstreamError && exchangeError.status === 409;
+        return reply.redirect(`${base}/?twitch=${wrongAccount ? 'wrong-account' : 'failed'}`);
       }
       request.log.info('Bot Twitch chat login connected');
       return reply.redirect(`${base}/?twitch=connected`);

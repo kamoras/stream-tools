@@ -12,12 +12,22 @@ type Mode = 'login' | 'register';
 const card = requireElement('#auth-card', HTMLElement);
 const params = new URLSearchParams(window.location.search);
 
-/** Only same-site paths, so the login page can't be used as an open redirect. */
+/**
+ * Only same-origin destinations, so the login page can't be used as an open
+ * redirect. Resolving with the URL parser (rather than checking prefixes)
+ * handles the tabs, newlines and backslashes browsers silently normalise.
+ */
 function nextUrl(): string {
   const next = params.get('next');
-  return next?.startsWith('/') === true && !next.startsWith('//') && !next.startsWith('/\\')
-    ? next
-    : '/control';
+  if (next === null) return '/control';
+  try {
+    const url = new URL(next, window.location.origin);
+    return url.origin === window.location.origin
+      ? `${url.pathname}${url.search}${url.hash}`
+      : '/control';
+  } catch {
+    return '/control';
+  }
 }
 
 function field(label: string, input: HTMLInputElement, hint?: string): HTMLElement {

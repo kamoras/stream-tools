@@ -6,7 +6,11 @@ import { seededRandom, silentLogger } from '../helpers.js';
 
 class RecordingClient implements RoomClient {
   public readonly messages: ServerMessage[] = [];
+  public closed: { code: number; reason: string } | null = null;
   public constructor(public readonly role: 'host' | 'overlay') {}
+  public close(code: number, reason: string): void {
+    this.closed = { code, reason };
+  }
   public send(message: ServerMessage): void {
     this.messages.push(message);
   }
@@ -48,6 +52,7 @@ describe('Room', () => {
     overlay = new RecordingClient('overlay');
     room.attach(host);
     room.attach(overlay);
+    changes = 0;
   });
 
   afterEach(() => {
@@ -83,6 +88,19 @@ describe('Room', () => {
     vi.advanceTimersByTime(200);
     expect(overlay.states.length).toBe(before + 1);
     expect(overlay.last?.totalGuesses).toBe(2);
+  });
+
+  it("ignores the broadcaster's own guesses", () => {
+    startGuessing();
+    room.handleChat({ ...chat('F12', 'owner'), login: 'Streamer' });
+    vi.advanceTimersByTime(200);
+    expect(overlay.last?.totalGuesses).toBe(0);
+  });
+
+  it('closes every client on closeAll', () => {
+    room.closeAll(4404, 'Game deleted');
+    expect(host.closed).toEqual({ code: 4404, reason: 'Game deleted' });
+    expect(overlay.closed).toEqual({ code: 4404, reason: 'Game deleted' });
   });
 
   it('ignores chat when not guessing', () => {

@@ -4,6 +4,7 @@ const crypto = require('crypto');
 
 const HELIX = 'https://api.twitch.tv/helix';
 const TOKEN_URL = 'https://id.twitch.tv/oauth2/token';
+const VALIDATE_URL = 'https://id.twitch.tv/oauth2/validate';
 
 // ---------------------------------------------------------------------------
 // App access token (client credentials, cached until near expiry)
@@ -49,6 +50,13 @@ async function exchangeAuthCode({ code, clientId, clientSecret, redirectUri }) {
   });
   if (!res.ok) throw new Error(`Twitch code exchange failed: ${res.status}`);
   return res.json(); // { access_token, refresh_token, expires_in, ... }
+}
+
+// Identifies which Twitch account a user access token belongs to.
+async function validateUserToken(accessToken) {
+  const res = await fetch(VALIDATE_URL, { headers: { Authorization: `OAuth ${accessToken}` } });
+  if (!res.ok) throw new Error(`Twitch token validation failed: ${res.status}`);
+  return res.json(); // { client_id, login, user_id, scopes, expires_in }
 }
 
 async function refreshUserToken({ refreshToken, clientId, clientSecret }) {
@@ -248,4 +256,4 @@ function verifySignature(secret, messageId, timestamp, rawBody, signature) {
   }
 }
 
-module.exports = { getAppToken, exchangeAuthCode, refreshUserToken, createChatTokenProvider, syncSubscriptions, subscribeChannel, unsubscribeChannel, getLiveChannels, verifySignature };
+module.exports = { getAppToken, exchangeAuthCode, validateUserToken, refreshUserToken, createChatTokenProvider, syncSubscriptions, subscribeChannel, unsubscribeChannel, getLiveChannels, verifySignature };

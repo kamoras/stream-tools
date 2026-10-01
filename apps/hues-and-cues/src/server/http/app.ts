@@ -16,6 +16,7 @@ import {
   isSameOrigin,
   sendError,
   sessionCookieName,
+  setSessionCookie,
 } from './request-context.js';
 import { registerRoomRoutes } from './room-routes.js';
 import { MAX_WS_PAYLOAD_BYTES, registerWsGateway } from './ws-gateway.js';
@@ -70,7 +71,11 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
     const token = request.cookies[cookieName];
     if (token) {
       request.sessionToken = token;
-      request.user = auth.resolveSession(token) ?? null;
+      const session = auth.resolveSessionDetailed(token);
+      request.user = session?.user ?? null;
+      // Re-issue the cookie when the session slides, so the browser's copy
+      // lives as long as the server-side session.
+      if (session?.renewed === true) setSessionCookie(reply, token, cookies);
     }
     return undefined;
   });
@@ -99,7 +104,7 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
 
   registerAuthRoutes(app, auth, cookies);
   registerRoomRoutes(app, { registry, allowedChannels: config.allowedChannels });
-  registerWsGateway(app, { registry, chat, logger: deps.logger });
+  registerWsGateway(app, { registry, chat, auth, logger: deps.logger });
 
   if (existsSync(config.publicDir)) {
     await app.register(fastifyStatic, {

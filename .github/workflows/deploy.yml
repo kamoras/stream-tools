@@ -2,7 +2,8 @@ name: Deploy
 
 # Every push to main is tested (ci.yml), then only the apps whose code changed
 # are rebuilt and restarted on the Oracle VM. Infrastructure-only changes
-# (infra/) re-apply configuration without restarting any app.
+# (infra/) re-apply configuration; apps restart only if their own service
+# definition or env file changed. Manual runs are accepted only on main.
 # See docs/DEPLOYMENT.md.
 
 on:
@@ -41,6 +42,13 @@ jobs:
       apps: ${{ steps.plan.outputs.apps }}
       deploy: ${{ steps.plan.outputs.deploy }}
     steps:
+      # Production only ever runs main: a manual run on another branch would
+      # otherwise publish that branch's images as :latest and deploy them.
+      - name: Require main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::Deploy runs only on main (this run is on $GITHUB_REF)."
+          exit 1
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
@@ -126,7 +134,7 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository }}/${{ matrix.app }}
           tags: |
-            type=raw,value=latest
+            type=raw,value=latest,enable={{is_default_branch}}
             type=sha,prefix=sha-
           labels: |
             org.opencontainers.image.title=${{ matrix.app }}
@@ -150,7 +158,7 @@ jobs:
       needs.plan.outputs.deploy == 'true' &&
       (needs.build.result == 'success' || needs.build.result == 'skipped')
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 40
     permissions:
       contents: read
       packages: read
@@ -170,6 +178,11 @@ jobs:
           for name in ORACLE_HOST ORACLE_USER ORACLE_SSH_KEY DOMAIN ADMIN_PASSWORD ADMIN_PATH; do
             if [ -z "${!name}" ]; then echo "::error::Secret $name is not set"; missing=1; fi
           done
+          # The admin app refuses other characters at startup (it is a URL segment).
+          if [ -n "$ADMIN_PATH" ] && ! [[ "$ADMIN_PATH" =~ ^[A-Za-z0-9_-]{1,128}$ ]]; then
+            echo "::error::Secret ADMIN_PATH may contain only letters, numbers, _ and - (up to 128)"
+            missing=1
+          fi
           exit $missing
 
       - name: Prepare server
@@ -208,7 +221,8 @@ jobs:
           username: ${{ secrets.ORACLE_USER }}
           key: ${{ secrets.ORACLE_SSH_KEY }}
           envs: APPS,GHCR_USER,GHCR_TOKEN
-          command_timeout: 15m
+          # Worst case: pulling three images plus three 3-minute health waits.
+          command_timeout: 30m
           script: |
             set -eu
             cd /opt/stream-tools

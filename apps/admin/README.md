@@ -14,7 +14,7 @@ Twitch OAuth redirect URL keep working. Any other `/admin/*` URL returns 404.
 
 ```
 browser ──HTTPS──► Caddy ── /admin/* on DOMAIN ──► admin:8080
-                                                     │  Bearer INTERNAL_API_TOKEN
+                                                     │  Bearer <that app's token>
                                      ┌───────────────┴───────────────┐
                                      ▼                               ▼
                          dbd-bot:9000 (internal)        hues-and-cues:9000 (internal)
@@ -25,8 +25,9 @@ browser ──HTTPS──► Caddy ── /admin/* on DOMAIN ──► admin:808
   `__Host-` cookie. State-changing requests must come from the dashboard's own origin.
 - **No app data lives here.** The dashboard calls each app's internal admin API server-side. Those
   ports are never routed by Caddy, so they are reachable only on the server's private Docker network,
-  and every call needs `INTERNAL_API_TOKEN`. In production the token is generated once on the server
-  (`env/internal.env`) and never leaves it.
+  and every call needs that app's own token, so one compromised app can't use another's API. In
+  production the tokens are generated once on the server (`env/internal-<app>.env`) and never
+  leave it.
 - **Twitch chat login.** **Connect via Twitch** sends you to Twitch with a single-use state value.
   Twitch redirects back to `/admin/<ADMIN_PATH>/twitch-callback`, and the dashboard hands the code to
   the bot, which exchanges it using its client secret and restarts on the new login. The dashboard
@@ -35,17 +36,18 @@ browser ──HTTPS──► Caddy ── /admin/* on DOMAIN ──► admin:808
 
 ## Configuration
 
-| Variable             | Default                     | Purpose                                                             |
-| -------------------- | --------------------------- | ------------------------------------------------------------------- |
-| `ADMIN_PASSWORD`     | — (required)                | The one admin password                                              |
-| `ADMIN_PATH`         | `admin`                     | Secret URL segment; the dashboard is `/admin/<ADMIN_PATH>/`         |
-| `PUBLIC_URL`         | — (required)                | Origin the dashboard is served from, e.g. `https://bot.example.com` |
-| `INTERNAL_API_TOKEN` | — (required, 32+ chars)     | Shared with each app's internal API                                 |
-| `DBD_BOT_API_URL`    | `http://dbd-bot:9000`       | Bot's internal API                                                  |
-| `HUES_API_URL`       | `http://hues-and-cues:9000` | Hues & Cues's internal API                                          |
-| `PORT`               | `8080`                      | HTTP port                                                           |
-| `TRUST_PROXY`        | `false`                     | Set behind Caddy (compose does this)                                |
-| `COOKIE_SECURE`      | on in production            | `Secure` cookies                                                    |
+| Variable            | Default                     | Purpose                                                             |
+| ------------------- | --------------------------- | ------------------------------------------------------------------- |
+| `ADMIN_PASSWORD`    | — (required)                | The one admin password                                              |
+| `ADMIN_PATH`        | `admin`                     | Secret URL segment; the dashboard is `/admin/<ADMIN_PATH>/`         |
+| `PUBLIC_URL`        | — (required)                | Origin the dashboard is served from, e.g. `https://bot.example.com` |
+| `DBD_BOT_API_TOKEN` | — (required, 32+ chars)     | The bot's `INTERNAL_API_TOKEN`                                      |
+| `DBD_BOT_API_URL`   | `http://dbd-bot:9000`       | Bot's internal API                                                  |
+| `HUES_API_TOKEN`    | — (required, 32+ chars)     | Hues & Cues's `INTERNAL_API_TOKEN`                                  |
+| `HUES_API_URL`      | `http://hues-and-cues:9000` | Hues & Cues's internal API                                          |
+| `PORT`              | `8080`                      | HTTP port                                                           |
+| `TRUST_PROXY`       | `false`                     | Set behind Caddy (compose does this)                                |
+| `COOKIE_SECURE`     | on in production            | `Secure` cookies                                                    |
 
 In production these come from the existing `ADMIN_PASSWORD`, `ADMIN_PATH` and `DOMAIN` secrets; see
 [docs/DEPLOYMENT.md](../../docs/DEPLOYMENT.md).
@@ -53,10 +55,13 @@ In production these come from the existing `ADMIN_PASSWORD`, `ADMIN_PATH` and `D
 ## Development
 
 ```bash
-cp .env.example .env   # point *_API_URL at locally running apps with the same INTERNAL_API_TOKEN
+cp .env.example .env   # matches the apps' .env.example tokens and ports
 npm ci
 npm run dev            # builds the page, then serves it with auto-reload
 npm run check          # format, lint, typecheck, tests
 ```
 
-Then open `http://localhost:8080/admin/<ADMIN_PATH>/`.
+Then open `http://localhost:8081/admin/local-admin/` (`PORT` and `ADMIN_PATH` from `.env`). Run the
+bot and Hues & Cues from their own directories (with their `.env.example` copied to `.env`) to see
+their sections; Connect via Twitch also needs `http://localhost:8081/admin/local-admin/twitch-callback`
+registered as a redirect URL on your Twitch app.

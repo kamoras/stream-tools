@@ -21,6 +21,7 @@
     "build:client": "vite build",
     "build:server": "tsc -p tsconfig.server.json",
     "start": "node dist/node/server/index.js",
+    "invite": "tsx --env-file-if-exists=.env src/server/invite-cli.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint .",
     "format": "prettier --write .",

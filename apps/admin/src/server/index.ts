@@ -1,5 +1,5 @@
 import { pino } from 'pino';
-import { loadConfig } from './config.js';
+import { loadConfig, type UpstreamConfig } from './config.js';
 import { buildAdminApp } from './http/app.js';
 import { AdminSessions } from './sessions.js';
 import { UpstreamClient } from './upstream.js';
@@ -17,8 +17,8 @@ async function main(): Promise<void> {
   }
 
   const sessions = new AdminSessions({ password: config.password });
-  const upstream = (name: string, baseUrl: string): UpstreamClient =>
-    new UpstreamClient({ name, baseUrl, token: config.internalApiToken });
+  const upstream = (name: string, { url, token }: UpstreamConfig): UpstreamClient =>
+    new UpstreamClient({ name, baseUrl: url, token });
   const app = await buildAdminApp({
     config,
     sessions,

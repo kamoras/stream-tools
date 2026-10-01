@@ -61,7 +61,7 @@ All commands use the `!dbd` prefix by default. Configurable via `BOT_PREFIX`.
 
 ## Configuration
 
-All configuration is done via environment variables. In production these are set as GitHub Actions secrets and synced to the server on every deploy. For local development, copy `.env.example` to `.env`.
+All configuration is done via environment variables. For local development, copy `.env.example` to `.env`. In production, the variables listed under [Deployment](#deployment) are set as GitHub Actions secrets and synced to the server on every deploy; the others keep their defaults there.
 
 | Variable | Required | Default | Description |
 |----------|:--------:|---------|-------------|
@@ -73,7 +73,7 @@ All configuration is done via environment variables. In production these are set
 | `INTERNAL_API_PORT` | | `9000` | Port of the internal admin API — never exposed publicly |
 | `BOT_PREFIX` | | `!dbd ` | Command prefix (trailing space required for multi-word prefixes) |
 | `BOT_JOIN_MESSAGE` | | themed default | Message the bot posts when it enters a channel's chat |
-| `QUEUE_ROLES_MODE` | | `both` | `off` · `both` · `survivor` · `killer` |
+| `QUEUE_ROLES_MODE` | | `off` (production deploys default to `both`) | `off` · `both` · `survivor` · `killer` |
 | `QUEUE_MAX_SIZE` | | `20` | Maximum queue size |
 | `PORT` | | `8080` | Internal port (Caddy proxies to this — do not expose publicly) |
 | `DB_PATH` | | `./data/bot.db` | SQLite path inside the container (maps to `/opt/stream-tools/data/dbd-bot/bot.db` on host) |

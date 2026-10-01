@@ -8,7 +8,7 @@ import {
   type ScryptParams,
   verifyPassword,
 } from './passwords.js';
-import type { SessionRepository } from './session-repository.js';
+import type { ResolvedSession, SessionRepository } from './session-repository.js';
 import {
   normalizeUsername,
   type User,
@@ -17,7 +17,7 @@ import {
 } from './user-repository.js';
 
 export type AuthErrorCode =
-  'invalid_credentials' | 'invalid_invite' | 'username_taken' | 'throttled';
+  'invalid_credentials' | 'wrong_password' | 'invalid_invite' | 'username_taken' | 'throttled';
 
 export class AuthError extends Error {
   public constructor(
@@ -37,7 +37,14 @@ export interface AuthServiceOptions {
   /** Runs `fn` atomically (a database transaction). */
   readonly transaction: <T>(fn: () => T) => T;
   readonly logger: Logger;
+  /** Failures per username and client IP. Defaults to 5 per 15 minutes. */
   readonly throttle?: LoginThrottle;
+  /**
+   * Failures per username from any IP: a ceiling against distributed
+   * guessing that is high enough that one attacker can't lock the owner out.
+   * Defaults to 50 per 15 minutes.
+   */
+  readonly accountThrottle?: LoginThrottle;
   readonly scryptParams?: ScryptParams;
 }
 
@@ -55,6 +62,7 @@ export class AuthService {
   private readonly sessions: SessionRepository;
   private readonly logger: Logger;
   private readonly throttle: LoginThrottle;
+  private readonly accountThrottle: LoginThrottle;
   private readonly scryptParams: ScryptParams;
   private readonly invites: InviteRepository;
   private readonly transaction: <T>(fn: () => T) => T;
@@ -67,6 +75,7 @@ export class AuthService {
     this.invites = options.invites;
     this.transaction = options.transaction;
     this.throttle = options.throttle ?? new LoginThrottle();
+    this.accountThrottle = options.accountThrottle ?? new LoginThrottle(50);
     this.scryptParams = options.scryptParams ?? DEFAULT_SCRYPT_PARAMS;
   }
 
@@ -101,9 +110,17 @@ export class AuthService {
     return { user, sessionToken: this.sessions.create(user.id) };
   }
 
-  public async login(username: string, password: string): Promise<AuthResult> {
-    const key = normalizeUsername(username);
-    const retryAfter = this.throttle.retryAfterSeconds(key);
+  public async login(
+    username: string,
+    password: string,
+    clientIp = 'unknown',
+  ): Promise<AuthResult> {
+    const accountKey = normalizeUsername(username);
+    const clientKey = `${accountKey}|${clientIp}`;
+    const retryAfter = Math.max(
+      this.throttle.retryAfterSeconds(clientKey),
+      this.accountThrottle.retryAfterSeconds(accountKey),
+    );
     if (retryAfter > 0) {
       throw new AuthError(
         'throttled',
@@ -111,17 +128,21 @@ export class AuthService {
         retryAfter,
       );
     }
+    // Count the attempt before the (slow) hash, so concurrent requests can't
+    // all slip past the limit; a successful sign-in takes it back.
+    this.throttle.recordFailure(clientKey);
+    this.accountThrottle.recordFailure(accountKey);
 
     const user = this.users.findByUsername(username);
     // Always run the hash so response time doesn't reveal whether the user exists.
     const valid = await verifyPassword(password, user?.passwordHash ?? (await this.getDummyHash()));
     if (!user || !valid) {
-      this.throttle.recordFailure(key);
-      this.logger.info({ username: key }, 'Failed sign-in');
+      this.logger.info({ username: accountKey }, 'Failed sign-in');
       throw new AuthError('invalid_credentials', INVALID_CREDENTIALS);
     }
 
-    this.throttle.reset(key);
+    this.throttle.reset(clientKey);
+    this.accountThrottle.forgiveOne(accountKey);
     if (needsRehash(user.passwordHash, this.scryptParams)) {
       this.users.updatePasswordHash(user.id, await hashPassword(password, this.scryptParams));
     }
@@ -141,7 +162,7 @@ export class AuthService {
   ): Promise<void> {
     const user = this.users.findById(userId);
     if (!user || !(await verifyPassword(currentPassword, user.passwordHash))) {
-      throw new AuthError('invalid_credentials', 'Your current password is incorrect.');
+      throw new AuthError('wrong_password', 'Your current password is incorrect.');
     }
     this.users.updatePasswordHash(userId, await hashPassword(newPassword, this.scryptParams));
     this.sessions.revokeAllForUser(userId, currentSessionToken);
@@ -152,6 +173,11 @@ export class AuthService {
     return token ? this.sessions.resolve(token) : undefined;
   }
 
+  /** Like {@link resolveSession}, also reporting whether the session was extended. */
+  public resolveSessionDetailed(token: string): ResolvedSession | undefined {
+    return this.sessions.resolveDetailed(token);
+  }
+
   public logout(token: string | undefined): void {
     if (token) this.sessions.revoke(token);
   }
@@ -159,6 +185,7 @@ export class AuthService {
   public pruneExpired(): void {
     this.sessions.pruneExpired();
     this.throttle.prune();
+    this.accountThrottle.prune();
   }
 
   private getDummyHash(): Promise<string> {

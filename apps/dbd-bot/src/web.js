@@ -362,6 +362,13 @@ function createWebServer({
     return res.send(renderSuccess(botName, rawChannel, prefix));
   });
 
+  // Liveness for the container health check and deploys: the process is up
+  // and serving. Unlike /health it doesn't depend on Twitch, so a chat outage
+  // or expired token can't block the deploy that would let you fix it.
+  app.get('/health/live', (_req, res) => {
+    res.json({ status: 'ok', uptimeMs: Date.now() - START_TIME });
+  });
+
   app.get('/health', (_req, res) => {
     const connected = isConnected();
     res

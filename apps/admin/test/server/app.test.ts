@@ -70,10 +70,12 @@ describe('admin dashboard', () => {
       'DELETE /invites/1': () => ({ status: 204 }),
       'POST /channels/streamer/join': () => ({ status: 204 }),
       'POST /channels/streamer/disconnect': () => ({ status: 204 }),
-      'POST /twitch/exchange': (body) =>
-        (body as { code?: string }).code === 'bad'
-          ? { status: 502, body: { error: 'rejected' } }
-          : { status: 204 },
+      'POST /twitch/exchange': (body) => {
+        const code = (body as { code?: string }).code;
+        if (code === 'bad') return { status: 502, body: { error: 'rejected' } };
+        if (code === 'other-account') return { status: 409, body: { error: 'wrong account' } };
+        return { status: 204 };
+      },
     });
     hues = await fakeUpstream({
       'GET /overview': () => ({ body: { invites: [], users: [], inviteTtlDays: 14 } }),
@@ -142,6 +144,20 @@ describe('admin dashboard', () => {
       expect((await call('GET', `${BASE}/api/session`, cookie)).json()).toEqual({
         signedIn: false,
       });
+    });
+
+    it('locks out a client after repeated failures without locking out others', async () => {
+      const attempt = (password: string) =>
+        app.inject({
+          method: 'POST',
+          url: `${BASE}/api/login`,
+          headers: ORIGIN,
+          remoteAddress: '203.0.113.9',
+          payload: { password },
+        });
+      for (let i = 0; i < 10; i += 1) await attempt('wrong');
+      expect((await attempt(PASSWORD)).statusCode).toBe(429);
+      await login(); // a different client still gets in
     });
 
     it('blocks cross-site POSTs', async () => {
@@ -228,8 +244,8 @@ describe('admin dashboard', () => {
 
   describe('Twitch chat login', () => {
     const connect = async (cookie: string): Promise<URL> => {
-      const response = await call('GET', `${BASE}/twitch-connect`, cookie);
-      expect(response.statusCode).toBe(302);
+      const response = await call('POST', `${BASE}/twitch-connect`, cookie);
+      expect(response.statusCode).toBe(303);
       return new URL(String(response.headers.location));
     };
 
@@ -241,6 +257,7 @@ describe('admin dashboard', () => {
         `${PUBLIC_URL}${BASE}/twitch-callback`,
       );
       expect(location.searchParams.get('scope')).toBe('chat:read chat:edit');
+      expect(location.searchParams.get('force_verify')).toBe('true');
       expect(location.searchParams.get('state')).toMatch(/^[0-9a-f]{32}$/u);
     });
 
@@ -280,9 +297,40 @@ describe('admin dashboard', () => {
     });
 
     it('sends signed-out visitors back to the login page', async () => {
-      const response = await call('GET', `${BASE}/twitch-connect`);
+      const response = await call('POST', `${BASE}/twitch-connect`);
       expect(response.headers.location).toBe(`${BASE}/`);
       expect(bot.calls).toEqual([]);
+    });
+
+    it('cannot be started from another site or by a plain link', async () => {
+      const cookie = await login();
+      const crossSite = await app.inject({
+        method: 'POST',
+        url: `${BASE}/twitch-connect`,
+        headers: { origin: 'https://evil.example', host: 'localhost', cookie },
+      });
+      expect(crossSite.statusCode).toBe(403);
+      expect((await call('GET', `${BASE}/twitch-connect`, cookie)).statusCode).toBe(404);
+      expect(bot.calls).toEqual([]);
+    });
+
+    it('reports a login for the wrong Twitch account', async () => {
+      const cookie = await login();
+      const state = (await connect(cookie)).searchParams.get('state') ?? '';
+      const callback = await call(
+        'GET',
+        `${BASE}/twitch-callback?code=other-account&state=${state}`,
+        cookie,
+      );
+      expect(callback.headers.location).toBe(`${BASE}/?twitch=wrong-account`);
+    });
+
+    it('redirects back with a message when the bot is down', async () => {
+      const cookie = await login();
+      await bot.server.close();
+      const down = await call('POST', `${BASE}/twitch-connect`, cookie);
+      expect(down.statusCode).toBe(303);
+      expect(down.headers.location).toBe(`${BASE}/?twitch=unavailable`);
     });
   });
 
@@ -307,6 +355,37 @@ describe('admin dashboard', () => {
         ['POST', '/invites', { note: 'for Sam' }],
         ['DELETE', '/invites/7', undefined],
       ]);
+    });
+
+    it('turns an app’s 401 into a 502, never a dashboard "sign in again" 401', async () => {
+      const misconfigured = await buildAdminApp({
+        config: {
+          path: PATH,
+          publicUrl: PUBLIC_URL,
+          cookieSecure: false,
+          trustProxy: false,
+          publicDir: '/nonexistent',
+          env: 'test',
+        },
+        sessions: new AdminSessions({ password: PASSWORD }),
+        bot: new UpstreamClient({ name: 'bot', baseUrl: bot.url, token: TOKEN }),
+        hues: new UpstreamClient({ name: 'Hues & Cues', baseUrl: hues.url, token: 'wrong-token' }),
+        logger: silentLogger,
+      });
+      const signIn = await misconfigured.inject({
+        method: 'POST',
+        url: `${BASE}/api/login`,
+        headers: ORIGIN,
+        payload: { password: PASSWORD },
+      });
+      const session = signIn.cookies.find((c) => c.name === 'st_admin');
+      const response = await misconfigured.inject({
+        method: 'GET',
+        url: `${BASE}/api/hues-and-cues`,
+        headers: { ...ORIGIN, cookie: `st_admin=${session?.value ?? ''}` },
+      });
+      expect(response.statusCode).toBe(502);
+      await misconfigured.close();
     });
 
     it('passes app errors through and reports unreachable apps', async () => {

@@ -58,7 +58,11 @@ export class RoomRegistry {
   public load(): void {
     const { rooms, invalid } = this.store.loadAll();
     for (const record of rooms) {
-      this.rooms.set(record.id, this.instantiate(record, record.game));
+      try {
+        this.rooms.set(record.id, this.instantiate(record, record.game));
+      } catch (error) {
+        this.logger.error({ err: error, room: record.id }, 'Skipping room that failed to restore');
+      }
     }
     for (const { id, error } of invalid) {
       this.logger.error({ err: error, room: id }, 'Skipping room with unreadable game state');
@@ -89,8 +93,9 @@ export class RoomRegistry {
       createdAt: now,
       lastActiveAt: now,
     });
-    this.rooms.set(room.id, room);
+    // Persist first: if the write fails, the room never becomes visible.
     this.store.saveMany([toRecord(room)]);
+    this.rooms.set(room.id, room);
     this.logger.info({ room: room.id, channel, ownerId }, 'Room created');
     return { room, created: true };
   }
@@ -167,9 +172,17 @@ export class RoomRegistry {
     if (records.length === 0) return;
     try {
       this.store.saveMany(records);
-    } catch (error) {
-      this.logger.error({ err: error }, 'Failed to persist rooms');
-      for (const record of records) this.dirty.add(record.id);
+    } catch (batchError) {
+      // Fall back to one write per room so a single bad record can't block the rest.
+      this.logger.warn({ err: batchError }, 'Batch save failed; saving rooms one by one');
+      for (const record of records) {
+        try {
+          this.store.saveMany([record]);
+        } catch (error) {
+          this.logger.error({ err: error, room: record.id }, 'Failed to persist room');
+          this.dirty.add(record.id);
+        }
+      }
     }
   }
 
@@ -180,6 +193,7 @@ export class RoomRegistry {
 
   private remove(room: Room): void {
     room.sendToAll({ type: 'error', code: 'not_found', message: 'This game was deleted.' });
+    room.closeAll(4404, 'Game deleted');
     room.dispose();
     this.rooms.delete(room.id);
     this.dirty.delete(room.id);

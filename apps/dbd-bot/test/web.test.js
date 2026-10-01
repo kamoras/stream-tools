@@ -66,6 +66,14 @@ describe('GET /health', () => {
   });
 });
 
+describe('GET /health/live', () => {
+  it('reports the process is up regardless of the chat connection', async () => {
+    const res = await request(app).get('/health/live');
+    assert.equal(res.status, 200);
+    assert.equal(res.body.status, 'ok');
+  });
+});
+
 describe('POST /onboard', () => {
   it('rejects missing fields', async () => {
     const res = await request(app).post('/onboard').type('form').send({});

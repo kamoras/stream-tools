@@ -356,7 +356,7 @@ function renderGame(user: AuthUser, room: RoomSummary): void {
     ),
     h('p', {
       className: 'hint',
-      text: 'Viewers of this link can watch but not control the game. Control access is saved in this browser only.',
+      text: 'Anyone with this link can watch the game, but only your account can control it.',
     }),
   );
 
@@ -494,6 +494,9 @@ function renderGame(user: AuthUser, room: RoomSummary): void {
       next.clues.length,
       next.card?.map(formatCoord).join(',') ?? '',
       next.target ? formatCoord(next.target) : '',
+      // Settings that change the round panel's own controls.
+      next.settings.enforceClueWordLimits,
+      next.settings.useSecondClue,
     ].join('|');
     if (key !== phaseKey) {
       phaseKey = key;
@@ -701,7 +704,7 @@ function roundPanelContent(state: HostGameState, send: (command: HostCommand) =>
           'div',
           { className: 'actions' },
           button('Next round', { type: 'drawCard' }, 'primary'),
-          button('Back to lobby', { type: 'cancelRound' }, 'ghost'),
+          button('Finish', { type: 'cancelRound' }, 'ghost'),
         ),
       ];
     }

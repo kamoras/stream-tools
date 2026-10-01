@@ -9,6 +9,7 @@ import {
   type ServerMessage,
   WS_PATH,
 } from '../../shared/protocol.js';
+import type { AuthService } from '../auth/auth-service.js';
 import { GameError } from '../game/errors.js';
 import type { Room, RoomClient } from '../rooms/room.js';
 import type { RoomRegistry } from '../rooms/room-registry.js';
@@ -19,6 +20,22 @@ import { isSameOrigin } from './request-context.js';
 export const MAX_WS_PAYLOAD_BYTES = 16 * 1024;
 const HELLO_TIMEOUT_MS = 10_000;
 const HEARTBEAT_INTERVAL_MS = 30_000;
+/** Game-state updates are skipped for a socket this far behind; the next one catches it up. */
+const MAX_BUFFERED_BYTES = 1024 * 1024;
+
+/**
+ * Rooms send the same message object to every client of a role, so cache the
+ * serialised form per object instead of re-stringifying it per socket.
+ */
+const serialized = new WeakMap<ServerMessage, string>();
+function serialize(message: ServerMessage): string {
+  let text = serialized.get(message);
+  if (text === undefined) {
+    text = JSON.stringify(message);
+    serialized.set(message, text);
+  }
+  return text;
+}
 
 /** Close codes in the 4000-4999 application range. */
 export const CloseCode = {
@@ -32,6 +49,8 @@ export const CloseCode = {
 export interface WsGatewayOptions {
   readonly registry: RoomRegistry;
   readonly chat: Pick<TwitchChatClient, 'acquire' | 'release' | 'connected'>;
+  /** Re-checks host sessions, so signing out or changing password revokes live control. */
+  readonly auth: Pick<AuthService, 'resolveSession'>;
   readonly logger: Logger;
 }
 
@@ -45,7 +64,7 @@ export interface WsGatewayOptions {
  * game commands.
  */
 export function registerWsGateway(app: FastifyInstance, options: WsGatewayOptions): void {
-  const { registry, chat } = options;
+  const { registry, chat, auth } = options;
   const logger = options.logger.child({ component: 'ws' });
 
   app.get(WS_PATH, { websocket: true }, (socket: WebSocket, request: FastifyRequest) => {
@@ -56,7 +75,14 @@ export function registerWsGateway(app: FastifyInstance, options: WsGatewayOption
     const bucket = new TokenBucket(20, 5);
 
     const send = (message: ServerMessage): void => {
-      if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(message));
+      if (socket.readyState !== socket.OPEN) return;
+      if (message.type === 'state' && socket.bufferedAmount > MAX_BUFFERED_BYTES) return;
+      socket.send(serialize(message));
+    };
+    /** Whether a host connection's sign-in is still valid and still owns its room. */
+    const hostStillAuthorized = (room: Room): boolean => {
+      const current = auth.resolveSession(request.sessionToken ?? undefined);
+      return current?.id === room.ownerId;
     };
     const sendError = (code: ErrorCode, message: string): void => {
       send({ type: 'error', code, message });
@@ -66,6 +92,10 @@ export function registerWsGateway(app: FastifyInstance, options: WsGatewayOption
       socket.close(CloseCode.HelloTimeout, 'hello timeout');
     }, HELLO_TIMEOUT_MS);
     const heartbeat = setInterval(() => {
+      if (session?.role === 'host' && !hostStillAuthorized(session.room)) {
+        socket.close(CloseCode.Unauthorized, 'signed out');
+        return;
+      }
       if (!alive) {
         socket.terminate();
         return;
@@ -115,7 +145,13 @@ export function registerWsGateway(app: FastifyInstance, options: WsGatewayOption
           }
         }
         clearTimeout(helloTimer);
-        const client: RoomClient = { role: hello.data.role, send };
+        const client: RoomClient = {
+          role: hello.data.role,
+          send,
+          close: (code, reason) => {
+            socket.close(code, reason);
+          },
+        };
         session = { room, client, role: hello.data.role };
         chat.acquire(room.channel);
         send({ type: 'welcome', role: hello.data.role, serverTime: Date.now() });
@@ -127,6 +163,10 @@ export function registerWsGateway(app: FastifyInstance, options: WsGatewayOption
 
       if (session.role !== 'host') {
         sendError('unauthorized', 'Overlays are read-only.');
+        return;
+      }
+      if (!hostStillAuthorized(session.room)) {
+        socket.close(CloseCode.Unauthorized, 'signed out');
         return;
       }
       const command = hostCommandSchema.safeParse(payload);

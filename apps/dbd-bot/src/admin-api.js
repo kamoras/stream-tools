@@ -66,8 +66,9 @@ function createAdminApi({
 
   const app = express();
   app.disable('x-powered-by');
-  app.use(express.json({ limit: '4kb' }));
+  // Authenticate before reading any request body.
   app.use(requireToken(token));
+  app.use(express.json({ limit: '4kb' }));
 
   const twitchConfigured = Boolean(twitchClientId && twitchClientSecret);
 
@@ -169,6 +170,17 @@ function createAdminApi({
       const data = await eventsub.exchangeAuthCode({
         code, clientId: twitchClientId, clientSecret: twitchClientSecret, redirectUri,
       });
+      // Only accept a login for the bot's own account — otherwise whichever
+      // Twitch account the admin's browser happened to be signed into would
+      // become the bot.
+      const { login } = await eventsub.validateUserToken(data.access_token);
+      const expected = String(botName || '').toLowerCase();
+      if (!login || login.toLowerCase() !== expected) {
+        console.warn(`[admin-api] Rejected Twitch login for "${login}" (expected "${expected}")`);
+        return res.status(409).json({
+          error: `Signed in to Twitch as ${login || 'an unknown account'}; sign in as ${expected} instead`,
+        });
+      }
       db.setSetting('twitch_refresh_token', data.refresh_token);
       res.status(204).end();
       restartToApplyAuth();
@@ -176,6 +188,13 @@ function createAdminApi({
       console.error('[admin-api] Twitch code exchange failed:', err.message);
       res.status(502).json({ error: 'Twitch rejected the authorization code' });
     }
+  });
+
+  // JSON errors (e.g. a malformed body) instead of Express's HTML page.
+  app.use((err, _req, res, _next) => {
+    const status = err.status || err.statusCode || 500;
+    if (status >= 500) console.error('[admin-api] Error:', err.message);
+    res.status(status).json({ error: status >= 500 ? 'Internal error' : 'Bad request' });
   });
 
   return app;

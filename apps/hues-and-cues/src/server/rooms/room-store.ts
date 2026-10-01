@@ -63,8 +63,14 @@ export class RoomStore {
          last_active_at = excluded.last_active_at,
          game = excluded.game`,
     );
+    // A row left behind for the same owner and channel (for example one whose snapshot could not
+    // be loaded) would violate UNIQUE (owner_id, channel); the live room replaces it.
+    const removeConflict = this.db.prepare(
+      'DELETE FROM rooms WHERE owner_id = @ownerId AND channel = @channel AND id <> @id',
+    );
     this.db.transaction(() => {
       for (const record of records) {
+        removeConflict.run({ id: record.id, ownerId: record.ownerId, channel: record.channel });
         upsert.run({ ...record, game: JSON.stringify(record.game) });
       }
     })();

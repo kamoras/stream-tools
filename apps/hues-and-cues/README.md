@@ -23,21 +23,28 @@ Requires Node.js 22.12+.
 
 ```bash
 npm ci
+npm run invite       # prints a single-use invite code
 npm run build
 npm start            # http://localhost:8080
 ```
 
-Open <http://localhost:8080>, create an account, enter your channel name, then copy the **overlay URL** into
+Sign-up is invite-only. In production codes come from the shared admin dashboard
+([apps/admin](../admin)); locally, `npm run invite` writes one straight into the database (it reads
+`.env` if present, so set `DATA_DIR` there if you changed it).
+
+Open <http://localhost:8080>, create an account with the code, enter your channel name, then copy the **overlay URL** into
 OBS → _Sources_ → _Browser_ (width 1920, height 1080). The control panel's
 **Test without chat** card lets you rehearse a round without anyone in chat.
 
-For development with hot reload, run `npm run dev` and open <http://localhost:5173>.
+For development with hot reload, run `cp .env.example .env`, then `npm run dev`, and open
+<http://localhost:5173/control>.
 
 ## How a round works
 
 1. **Draw a card** — four well-separated colours appear, visible only to you.
 2. **Pick a colour** and enter a **one-word clue**. Guessing opens on stream.
-3. Chat types coordinates. Each chatter gets one guess per clue (they may move it while guessing
+3. Chat types coordinates (your own messages don't count, since you know the answer). Each chatter
+   gets one guess per clue (they may move it while guessing
    is open unless you disable that).
 4. Guessing closes when the timer runs out or you close it. Give a **second clue** (up to two
    words) for a second guess, or reveal immediately.
@@ -74,7 +81,7 @@ Accepted chat formats: `F12`, `f12`, `F 12`, `F-12`, `12F`, `!guess F12`, `!g F1
 - Passwords need at least 10 characters. Any characters are allowed, and passphrases are encouraged.
 - Passwords are hashed with scrypt. Sign-ins use a server-side session in a `Secure`, `HttpOnly`,
   `SameSite=Lax` cookie that lasts 30 days from last use.
-- Repeated failed sign-ins are rate-limited per IP and per account.
+- Repeated failed sign-ins are limited per account and IP, with a higher ceiling per account.
 - Changing your password signs out every other device.
 - Each account can run games for up to 5 channels. Only the owner can control a game; its overlay
   link is public and read-only so OBS needs no sign-in.

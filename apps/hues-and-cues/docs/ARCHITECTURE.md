@@ -43,18 +43,22 @@ the round is revealed, so it cannot leak through browser dev tools or a shared o
 with scrypt using OWASP-recommended parameters. The hashes record their own parameters, so they are
 upgraded automatically on the next login if the defaults are raised. Login runs the hash even for
 unknown usernames, so response timing doesn't reveal which accounts exist. Failures are limited
-both per IP and per account.
+per account and client IP (5 per 15 minutes), with a much higher per-account ceiling (50) so one
+attacker can't lock the owner out. Attempts are counted before the hash runs, so parallel requests
+can't slip past the limit.
 
 A session is a random 256-bit token held in an `HttpOnly`, `SameSite=Lax` cookie, marked `Secure`
 with the `__Host-` prefix in production. The server stores only its SHA-256 hash, and expiry slides
-forward as the session is used. Changing the password revokes every other session.
+forward as the session is used (at most hourly); the cookie is re-issued whenever it does, so the
+browser keeps it as long as the server does. Changing the password revokes every other session.
 
 **Cross-site protection.** State-changing requests must carry an `Origin` header matching the
 server, on top of `SameSite` cookies. WebSocket upgrades for the host role are checked the same way,
 which blocks cross-site WebSocket hijacking.
 
 **Authorisation.** Every room has an owner. Room endpoints and host WebSocket connections require a
-session whose user owns the room. Overlay URLs contain only the public room id and are read-only, so
+session whose user owns the room. Host sockets re-check the session on every command and every
+heartbeat, so signing out or changing the password ends live control too. Overlay URLs contain only the public room id and are read-only, so
 an OBS browser source needs no credentials. `ALLOWED_CHANNELS` can further restrict which channels
 may run games.
 
@@ -75,7 +79,8 @@ rate-limited per IP.
 
 **Resilience.** The chat client reconnects with jittered exponential back-off, honours Twitch's
 `RECONNECT`, detects dead connections with keepalive pings and rejoins channels. Browser clients
-reconnect indefinitely (OBS sources run for hours) except after an authorisation failure.
+reconnect indefinitely (OBS sources run for hours) except after a fatal close (4400, 4401, 4403 or
+4404), where retrying cannot help.
 
 **Colour board.** Colours are generated in OKLCH (perceptually uniform) and gamut-mapped to sRGB hex
 in TypeScript, so neighbouring squares look evenly spaced and the board renders identically in older
@@ -91,7 +96,8 @@ Defined in `src/shared/protocol.ts`.
    after every change.
 3. Hosts send commands: `drawCard`, `selectTarget`, `giveClue`, `closeGuessing`, `reveal`,
    `cancelRound`, `resetScores`, `updateSettings`, `simulateGuess`.
-4. Failures come back as `error` messages; fatal problems close the socket with a 44xx code.
+4. Failures come back as `error` messages; fatal problems close the socket with a 44xx code
+   (4400 bad hello, 4401 not signed in, 4403 not your game, 4404 game not found or deleted).
 
 ## Game phases
 

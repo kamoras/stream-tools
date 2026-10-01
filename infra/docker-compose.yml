@@ -4,9 +4,9 @@
 # docs/DEPLOYMENT.md. Caddy is the only service with published ports and
 # routes each hostname to its app; /admin/* on the bot's hostname goes to the
 # shared admin dashboard. Secrets live in env/*.env on the server (written
-# from GitHub Actions secrets; env/internal.env holds a token generated on the
-# server that the dashboard uses to call each app's internal admin API on
-# port 9000, which is never published) and app data in data/<app>/.
+# from GitHub Actions secrets; env/internal-<app>.env holds a per-app token
+# generated on the server that the dashboard uses to call that app's internal
+# admin API on port 9000, which is never published) and app data in data/<app>/.
 # IMAGE_REGISTRY overrides where app images come from (default: GHCR).
 name: stream-tools
 
@@ -38,7 +38,7 @@ services:
     image: ${IMAGE_REGISTRY:-ghcr.io/kamoras/stream-tools}/dbd-bot:latest
     container_name: dbd-bot
     restart: unless-stopped
-    env_file: [env/internal.env, env/dbd-bot.env]
+    env_file: [env/internal-dbd-bot.env, env/dbd-bot.env]
     volumes:
       - ./data/dbd-bot:/app/data
     healthcheck:
@@ -47,7 +47,7 @@ services:
           'CMD',
           'node',
           '-e',
-          "fetch('http://localhost:8080/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+          "fetch('http://localhost:8080/health/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
         ]
       interval: 30s
       timeout: 5s
@@ -59,7 +59,7 @@ services:
     image: ${IMAGE_REGISTRY:-ghcr.io/kamoras/stream-tools}/hues-and-cues:latest
     container_name: hues-and-cues
     restart: unless-stopped
-    env_file: [env/internal.env, env/hues-and-cues.env]
+    env_file: [env/internal-hues-and-cues.env, env/hues-and-cues.env]
     environment:
       TRUST_PROXY: 'true'
     volumes:
@@ -70,7 +70,7 @@ services:
     image: ${IMAGE_REGISTRY:-ghcr.io/kamoras/stream-tools}/admin:latest
     container_name: admin
     restart: unless-stopped
-    env_file: [env/internal.env, env/admin.env]
+    env_file: [env/internal-admin.env, env/admin.env]
     environment:
       TRUST_PROXY: 'true'
     logging: *logging

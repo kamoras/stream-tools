@@ -16,7 +16,17 @@ readonly ROOT
 readonly APP_UID=1000 # the `node` user in both app images
 readonly ALL_APPS=(dbd-bot hues-and-cues admin)
 readonly DATA_APPS=(dbd-bot hues-and-cues) # apps with persistent data
+# Apps with an internal admin API, and the admin variable holding each one's token.
+declare -rA API_TOKEN_VARS=([dbd-bot]=DBD_BOT_API_TOKEN [hues-and-cues]=HUES_API_TOKEN)
 readonly HEALTH_TIMEOUT_SECONDS=180
+
+# Survive the SSH session going away (job cancelled or timed out): ignore
+# SIGHUP/SIGPIPE and send all output through tee, which keeps writing the log
+# file after its stdout pipe closes. A half-finished migration can then still
+# roll back. The latest run's output is kept in deploy.log.
+trap '' HUP PIPE
+exec > >(tee --output-error=warn-nopipe "$ROOT/deploy.log") 2>&1
+TEE_PID=$!
 
 log() { printf '==> %s\n' "$*"; }
 fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
@@ -50,15 +60,22 @@ prepare_directories() {
   [[ -f env/caddy.env ]] || fail "Missing env/caddy.env"
 }
 
-# The admin dashboard authenticates to each app's internal API with a shared
-# token. It never leaves the server, so it is generated here once and kept.
-ensure_internal_token() {
-  if [[ ! -s env/internal.env ]]; then
-    local token
-    token="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
-    (umask 077 && printf 'INTERNAL_API_TOKEN=%s\n' "$token" >env/internal.env)
-    log "Generated internal API token"
-  fi
+# Each app's internal admin API has its own token, so a compromised app can't
+# drive another app's API; only the admin dashboard holds all of them. They
+# never leave the server, so they are generated here once and kept.
+ensure_internal_tokens() {
+  local app file token lines=''
+  for app in "${!API_TOKEN_VARS[@]}"; do
+    file="env/internal-$app.env"
+    if [[ ! -s "$file" ]]; then
+      token="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+      (umask 077 && printf 'INTERNAL_API_TOKEN=%s\n' "$token" >"$file")
+      log "Generated internal API token for $app"
+    fi
+    lines+="${API_TOKEN_VARS[$app]}=$(env_value "$file" INTERNAL_API_TOKEN)"$'\n'
+  done
+  (umask 077 && printf '%s' "$lines" >env/internal-admin.env)
+  rm -f env/internal.env # single shared token used by earlier versions
 }
 
 env_value() { # env_value FILE NAME -> value of NAME in FILE, or empty
@@ -109,7 +126,7 @@ main() {
   local apps=("$@")
 
   prepare_directories
-  ensure_internal_token
+  ensure_internal_tokens
   sync_caddy_sites
 
   local migrate=0
@@ -128,8 +145,10 @@ main() {
   # Only services whose image or configuration changed are recreated.
   compose up -d --remove-orphans
 
+  # Every app, not just the ones deployed: a configuration change can recreate
+  # any of them. Healthy ones pass on the first check.
   local app
-  for app in "${apps[@]}"; do wait_healthy "$app"; done
+  for app in "${ALL_APPS[@]}"; do wait_healthy "$app"; done
   reload_caddy
 
   if migration_in_progress; then finish_migration; fi
@@ -140,6 +159,9 @@ main() {
 on_exit() {
   local status=$?
   if ((status != 0)) && migration_in_progress; then rollback_migration; fi
+  # Let tee flush the last lines before the SSH session reports the exit.
+  exec >&- 2>&-
+  wait "$TEE_PID" 2>/dev/null || true
 }
 trap on_exit EXIT
 

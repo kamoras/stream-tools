@@ -37,7 +37,7 @@ This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.
    cp .env.example .env     # see the app's README for required values
    ```
 
-4. **Create a feature branch:**
+3. **Create a feature branch:**
    ```bash
    git checkout -b feat/your-feature-name
    ```
@@ -56,9 +56,11 @@ npm run dev
 
 The landing page is available at `http://localhost:8080`.
 
-The admin dashboard is at `http://localhost:8080/admin/YOUR_ADMIN_PATH` (use whatever you set for `ADMIN_PATH` in `.env`).
+The bot has no admin pages of its own: it is managed from the shared dashboard in `apps/admin`, which
+calls the bot's internal API (port 9001 with the `.env.example` values). To use it locally, run
+`apps/admin` too; its README explains how.
 
-Generate a local invite code to onboard a test channel:
+Generate a local invite code to onboard a test channel without the dashboard:
 ```bash
 npm run invite
 ```

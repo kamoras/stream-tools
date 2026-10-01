@@ -12,9 +12,7 @@ import type {
 import { type Child, h, replaceChildren, requireElement } from './dom.js';
 
 // The page lives at /admin/<secret path>/; everything is relative to it.
-const base = window.location.pathname.endsWith('/')
-  ? window.location.pathname
-  : `${window.location.pathname}/`;
+const base = window.location.pathname.replace(/[^/]*$/u, '');
 const app = requireElement('#app', HTMLElement);
 const REFRESH_MS = 30_000;
 
@@ -119,11 +117,21 @@ function copyButton(value: string): HTMLButtonElement {
   });
 }
 
+/** Shows a newly generated code until the admin dismisses it; refreshes keep it. */
 function revealCode(container: HTMLElement, code: string, note: string): void {
   replaceChildren(
     container,
     h('span', { className: 'hint', text: note }),
-    h('div', { className: 'row' }, h('code', { className: 'code', text: code }), copyButton(code)),
+    h(
+      'div',
+      { className: 'row' },
+      h('code', { className: 'code', text: code }),
+      copyButton(code),
+      button('Dismiss', () => {
+        container.hidden = true;
+        replaceChildren(container);
+      }),
+    ),
   );
   container.hidden = false;
 }
@@ -183,17 +191,33 @@ const TWITCH_MESSAGES: Readonly<Record<string, [string, 'ok' | 'bad']>> = {
   declined: ['Twitch authorization was declined.', 'bad'],
   expired: ['That Twitch authorization link expired or was already used. Try again.', 'bad'],
   failed: ['Twitch rejected the authorization. Check the bot logs and try again.', 'bad'],
+  'wrong-account': [
+    'That Twitch account isn’t the bot’s. Connect again and sign in to Twitch as the bot account.',
+    'bad',
+  ],
+  unavailable: [
+    'The bot is not reachable right now, so Twitch can’t be connected. Try again shortly.',
+    'bad',
+  ],
   'not-configured': ['Set TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET for the bot first.', 'bad'],
 };
 
-function renderDashboard(): void {
-  const botSection = h('section', { className: 'app-section' });
-  const huesSection = h('section', { className: 'app-section' });
+/** One app's part of the dashboard. Built once; refreshes only update its data. */
+interface Section {
+  readonly element: HTMLElement;
+  load(): Promise<void>;
+}
 
+function renderDashboard(): void {
   const params = new URLSearchParams(window.location.search);
   const twitchResult = params.get('twitch');
   const banner = twitchResult === null ? undefined : TWITCH_MESSAGES[twitchResult];
   if (twitchResult !== null) window.history.replaceState(null, '', base);
+
+  const sections = [createBotSection(), createHuesSection()];
+  const refresh = (): void => {
+    for (const section of sections) void section.load();
+  };
 
   replaceChildren(
     app,
@@ -222,70 +246,85 @@ function renderDashboard(): void {
         attrs: { role: 'status' },
         text: banner[0],
       }),
-    h('div', { className: 'stack' }, botSection, huesSection),
+    h('div', { className: 'stack' }, ...sections.map((section) => section.element)),
   );
 
-  function refresh(): void {
-    void loadBot(botSection);
-    void loadHues(huesSection);
-  }
   refresh();
   window.clearInterval(refreshTimer);
   refreshTimer = window.setInterval(refresh, REFRESH_MS);
 }
 
-function sectionShell(container: HTMLElement, title: string, ...children: Child[]): void {
-  replaceChildren(
-    container,
-    h('h2', { text: title }),
-    h('div', { className: 'grid' }, ...children),
+/**
+ * Section chrome: a title, an error card for when the app can't be reached,
+ * and a grid of cards that is hidden while the error shows.
+ */
+function sectionFrame(
+  title: string,
+  cards: readonly HTMLElement[],
+): { element: HTMLElement; show(): void; fail(error: unknown): void } {
+  const errorText = h('p', { className: 'muted' });
+  const errorCard = h(
+    'div',
+    { className: 'card card--wide card--error', attrs: { hidden: '' } },
+    h('h3', { text: 'Unavailable' }),
+    errorText,
   );
-}
-
-function unreachable(container: HTMLElement, title: string, error: unknown): void {
-  if (error instanceof HttpError && error.status === 401) {
-    renderLogin();
-    return;
-  }
-  sectionShell(
-    container,
-    title,
-    h(
-      'div',
-      { className: 'card card--wide card--error' },
-      h('h3', { text: 'Unavailable' }),
-      h('p', {
-        className: 'muted',
-        text: error instanceof Error ? error.message : 'Could not load this app.',
-      }),
-    ),
-  );
+  const grid = h('div', { className: 'grid' }, ...cards);
+  return {
+    element: h('section', { className: 'app-section' }, h('h2', { text: title }), errorCard, grid),
+    show() {
+      errorCard.hidden = true;
+      grid.hidden = false;
+    },
+    fail(error) {
+      if (error instanceof HttpError && error.status === 401) {
+        renderLogin();
+        return;
+      }
+      errorText.textContent = error instanceof Error ? error.message : 'Could not load this app.';
+      errorCard.hidden = false;
+      grid.hidden = true;
+    },
+  };
 }
 
 // --- Dead by Daylight bot -----------------------------------------------------------
 
-const BOT_TITLE = 'Dead by Daylight bot';
 const EVENT_LABELS: Readonly<Record<string, string>> = {
   online: 'Stream started',
   offline: 'Stream ended',
   revoked: 'Subscription revoked',
 };
 
-async function loadBot(container: HTMLElement): Promise<void> {
-  try {
-    renderBot(container, await api<BotOverview>('dbd-bot'));
-  } catch (error) {
-    unreachable(container, BOT_TITLE, error);
-  }
-}
-
-function renderBot(container: HTMLElement, overview: BotOverview): void {
-  const reload = (): void => void loadBot(container);
+function createBotSection(): Section {
+  const statusCard = h('div', { className: 'card' });
   const reveal = h('div', { className: 'reveal', attrs: { hidden: '' } });
-  sectionShell(
-    container,
-    BOT_TITLE,
-    botStatusCard(overview.status),
+  const inviteList = h('ul', { className: 'list' });
+  const channelsTitle = h('h3');
+  const channelList = h('ul', { className: 'list' });
+  const webhookCard = h('div', { className: 'card' });
+
+  const generate: HTMLButtonElement = button(
+    'Generate Code',
+    () => {
+      generate.disabled = true;
+      api<{ code: string }>('dbd-bot/invites', { method: 'POST' })
+        .then(({ code }) => {
+          revealCode(reveal, code, 'New bot invite code:');
+          return load();
+        })
+        .catch((error: unknown) => {
+          fail(error, 'Could not generate a code.');
+        })
+        .finally(() => {
+          generate.disabled = false;
+        });
+    },
+    'primary',
+  );
+
+  const frame = sectionFrame('Dead by Daylight bot', [
+    statusCard,
     h(
       'div',
       { className: 'card' },
@@ -294,42 +333,35 @@ function renderBot(container: HTMLElement, overview: BotOverview): void {
         className: 'muted',
         text: 'Single-use codes streamers enter on the bot’s landing page to connect their channel.',
       }),
-      button(
-        'Generate Code',
-        () => {
-          api<{ code: string }>('dbd-bot/invites', { method: 'POST' })
-            .then(({ code }) => {
-              container.dataset.revealed = code;
-              reload();
-            })
-            .catch((error: unknown) => {
-              fail(error, 'Could not generate a code.');
-            });
-        },
-        'primary',
-      ),
+      generate,
       reveal,
-      h('ul', { className: 'list' }, ...botInviteRows(overview.invites, reload)),
+      inviteList,
     ),
-    h(
-      'div',
-      { className: 'card card--wide' },
-      h('h3', { text: `Channels (${String(overview.channels.length)})` }),
-      h('ul', { className: 'list' }, ...botChannelRows(overview.channels, reload)),
-    ),
-    webhookCard(overview.status),
-  );
-  const revealed = container.dataset.revealed;
-  if (revealed) {
-    revealCode(reveal, revealed, 'New bot invite code:');
-    delete container.dataset.revealed;
+    h('div', { className: 'card card--wide' }, channelsTitle, channelList),
+    webhookCard,
+  ]);
+
+  async function load(): Promise<void> {
+    let overview: BotOverview;
+    try {
+      overview = await api<BotOverview>('dbd-bot');
+    } catch (error) {
+      frame.fail(error);
+      return;
+    }
+    frame.show();
+    replaceChildren(statusCard, ...botStatusContent(overview.status));
+    replaceChildren(inviteList, ...botInviteRows(overview.invites, load));
+    channelsTitle.textContent = `Channels (${String(overview.channels.length)})`;
+    replaceChildren(channelList, ...botChannelRows(overview.channels, load));
+    replaceChildren(webhookCard, ...webhookContent(overview.status));
   }
+
+  return { element: frame.element, load };
 }
 
-function botStatusCard(status: BotStatus): HTMLElement {
-  return h(
-    'div',
-    { className: 'card' },
+function botStatusContent(status: BotStatus): Child[] {
+  return [
     h('h3', { text: 'Status' }),
     h(
       'dl',
@@ -357,19 +389,28 @@ function botStatusCard(status: BotStatus): HTMLElement {
         : 'Using a static token that will eventually expire.',
     }),
     status.twitch.configured
-      ? h('a', {
-          className: 'button button--small',
-          text: status.chatSelfRefreshing ? 'Reconnect via Twitch' : 'Connect via Twitch',
-          attrs: { href: `${base}twitch-connect` },
-        })
+      ? // A POST, so only this page can start the flow (the server checks Origin).
+        h(
+          'form',
+          { attrs: { method: 'post', action: `${base}twitch-connect` } },
+          h('button', {
+            className: 'button button--small',
+            text: status.chatSelfRefreshing ? 'Reconnect via Twitch' : 'Connect via Twitch',
+            attrs: { type: 'submit' },
+          }),
+          h('span', {
+            className: 'hint',
+            text: `Sign in to Twitch as ${status.botName} when asked.`,
+          }),
+        )
       : h('span', {
           className: 'hint',
           text: 'Set TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET to connect via Twitch.',
         }),
-  );
+  ];
 }
 
-function botInviteRows(invites: readonly BotInvite[], reload: () => void): Node[] {
+function botInviteRows(invites: readonly BotInvite[], reload: () => Promise<void>): Node[] {
   if (invites.length === 0) return [h('li', { className: 'empty', text: 'No unused codes.' })];
   return invites.map((invite) =>
     h(
@@ -402,9 +443,10 @@ function botInviteRows(invites: readonly BotInvite[], reload: () => void): Node[
   );
 }
 
-function botChannelRows(channels: readonly BotChannel[], reload: () => void): Node[] {
-  if (channels.length === 0)
+function botChannelRows(channels: readonly BotChannel[], reload: () => Promise<void>): Node[] {
+  if (channels.length === 0) {
     return [h('li', { className: 'empty', text: 'No channels connected yet.' })];
+  }
   const act = (channel: string, action: 'join' | 'leave' | 'disconnect'): void => {
     if (
       action === 'disconnect' &&
@@ -415,7 +457,8 @@ function botChannelRows(channels: readonly BotChannel[], reload: () => void): No
     api(`dbd-bot/channels/${channel}/${action}`, { method: 'POST' })
       .then(() => {
         toast(`#${channel}: ${action} requested.`);
-        window.setTimeout(reload, 1500);
+        // Joining/leaving chat is asynchronous in the bot; give it a moment.
+        window.setTimeout(() => void reload(), 1500);
       })
       .catch((error: unknown) => {
         fail(error, `Could not ${action} #${channel}.`);
@@ -460,23 +503,19 @@ function botChannelRows(channels: readonly BotChannel[], reload: () => void): No
   );
 }
 
-function webhookCard(status: BotStatus): HTMLElement {
+function webhookContent(status: BotStatus): Child[] {
   const webhook = status.webhook;
   if (!webhook.enabled) {
-    return h(
-      'div',
-      { className: 'card' },
+    return [
       h('h3', { text: 'Webhook activity' }),
       h('p', {
         className: 'muted',
         text: 'EventSub webhooks are off; live status comes from polling.',
       }),
-    );
+    ];
   }
   const events = webhook.recentEvents ?? [];
-  return h(
-    'div',
-    { className: 'card' },
+  return [
     h('h3', { text: 'Webhook activity' }),
     h(
       'dl',
@@ -502,12 +541,11 @@ function webhookCard(status: BotStatus): HTMLElement {
             ),
           )),
     ),
-  );
+  ];
 }
 
 // --- Hues & Cues ------------------------------------------------------------------
 
-const HUES_TITLE = 'Hues & Cues';
 const HUES_STATUS: Readonly<
   Record<HuesInvite['status'], [string, 'ok' | 'warn' | 'bad' | 'plain']>
 > = {
@@ -517,23 +555,19 @@ const HUES_STATUS: Readonly<
   revoked: ['Revoked', 'bad'],
 };
 
-async function loadHues(container: HTMLElement): Promise<void> {
-  try {
-    renderHues(container, await api<HuesOverview>('hues-and-cues'));
-  } catch (error) {
-    unreachable(container, HUES_TITLE, error);
-  }
-}
-
-function renderHues(container: HTMLElement, overview: HuesOverview): void {
-  const reload = (): void => void loadHues(container);
+function createHuesSection(): Section {
+  const intro = h('p', { className: 'muted' });
   const reveal = h('div', { className: 'reveal', attrs: { hidden: '' } });
+  const inviteList = h('ul', { className: 'list' });
+  const usersTitle = h('h3');
+  const userList = h('ul', { className: 'list' });
   const note = h('input', {
     attrs: {
       id: 'hues-note',
       maxlength: '100',
       placeholder: 'Who is it for? (optional)',
       autocomplete: 'off',
+      'aria-label': 'Who the Hues & Cues invite is for',
     },
   });
   const generate = h('button', {
@@ -547,49 +581,54 @@ function renderHues(container: HTMLElement, overview: HuesOverview): void {
     generate.disabled = true;
     api<HuesCreatedInvite>('hues-and-cues/invites', { method: 'POST', body: { note: note.value } })
       .then(({ code }) => {
-        container.dataset.revealed = code;
-        reload();
+        note.value = '';
+        revealCode(
+          reveal,
+          code,
+          'New Hues & Cues invite code — copy it now; it won’t be shown again:',
+        );
+        return load();
       })
       .catch((error: unknown) => {
         fail(error, 'Could not generate a code.');
+      })
+      .finally(() => {
         generate.disabled = false;
       });
   });
 
-  sectionShell(
-    container,
-    HUES_TITLE,
+  const frame = sectionFrame('Hues & Cues', [
     h(
       'div',
       { className: 'card' },
       h('h3', { text: 'Invite codes' }),
-      h('p', {
-        className: 'muted',
-        text: `Sign-up is invite-only. Each code works once and expires after ${String(overview.inviteTtlDays)} days. The full code is shown only once.`,
-      }),
+      intro,
       form,
       reveal,
-      h('ul', { className: 'list' }, ...huesInviteRows(overview.invites, reload)),
+      inviteList,
     ),
-    h(
-      'div',
-      { className: 'card' },
-      h('h3', { text: `Users (${String(overview.users.length)})` }),
-      h('ul', { className: 'list' }, ...huesUserRows(overview.users)),
-    ),
-  );
-  const revealed = container.dataset.revealed;
-  if (revealed) {
-    revealCode(
-      reveal,
-      revealed,
-      'New Hues & Cues invite code — copy it now; it won’t be shown again:',
-    );
-    delete container.dataset.revealed;
+    h('div', { className: 'card' }, usersTitle, userList),
+  ]);
+
+  async function load(): Promise<void> {
+    let overview: HuesOverview;
+    try {
+      overview = await api<HuesOverview>('hues-and-cues');
+    } catch (error) {
+      frame.fail(error);
+      return;
+    }
+    frame.show();
+    intro.textContent = `Sign-up is invite-only. Each code works once and expires after ${String(overview.inviteTtlDays)} days. The full code is shown only once.`;
+    replaceChildren(inviteList, ...huesInviteRows(overview.invites, load));
+    usersTitle.textContent = `Users (${String(overview.users.length)})`;
+    replaceChildren(userList, ...huesUserRows(overview.users));
   }
+
+  return { element: frame.element, load };
 }
 
-function huesInviteRows(invites: readonly HuesInvite[], reload: () => void): Node[] {
+function huesInviteRows(invites: readonly HuesInvite[], reload: () => Promise<void>): Node[] {
   if (invites.length === 0) return [h('li', { className: 'empty', text: 'No invite codes yet.' })];
   return invites.map((invite) => {
     const [label, tone] = HUES_STATUS[invite.status];

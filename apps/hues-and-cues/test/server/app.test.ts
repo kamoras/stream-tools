@@ -279,7 +279,7 @@ describe('HTTP + WebSocket API', () => {
         { currentPassword: 'nope', newPassword: 'second password' },
         cookie,
       );
-      expect(wrong.statusCode).toBe(401);
+      expect(wrong.statusCode).toBe(403);
       const ok = await call(
         'POST',
         '/api/auth/password',
@@ -470,6 +470,25 @@ describe('HTTP + WebSocket API', () => {
         { cookie, origin: 'https://evil.example' },
       );
       expect(await hijack.waitForClose()).toBe(4401);
+    });
+
+    it('revokes live control when the host signs out', async () => {
+      const cookie = await register();
+      const room = await createRoom(cookie);
+      const host = await connect({ role: 'host', roomId: room.roomId }, hostHeaders(cookie));
+      await host.next((m) => m.type === 'welcome');
+      expect((await call('POST', '/api/auth/logout', undefined, cookie)).statusCode).toBe(204);
+      host.send({ type: 'drawCard' });
+      expect(await host.waitForClose()).toBe(4401);
+    });
+
+    it('disconnects overlays when their game is deleted', async () => {
+      const cookie = await register();
+      const room = await createRoom(cookie);
+      const overlay = await connect({ role: 'overlay', roomId: room.roomId });
+      await overlay.next((m) => m.type === 'welcome');
+      await call('DELETE', `/api/rooms/${room.roomId}`, undefined, cookie);
+      expect(await overlay.waitForClose()).toBe(4404);
     });
 
     it('rejects hosts who do not own the game', async () => {

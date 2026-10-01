@@ -4,7 +4,8 @@ import { loadConfig } from '../../src/server/config.js';
 const REQUIRED = {
   ADMIN_PASSWORD: 'admin password',
   PUBLIC_URL: 'https://bot.example.com',
-  INTERNAL_API_TOKEN: 't'.repeat(64),
+  DBD_BOT_API_TOKEN: 'b'.repeat(64),
+  HUES_API_TOKEN: 'h'.repeat(64),
 };
 
 describe('loadConfig', () => {
@@ -13,15 +14,18 @@ describe('loadConfig', () => {
       port: 8080,
       path: 'admin',
       publicUrl: 'https://bot.example.com',
-      upstreams: { 'dbd-bot': 'http://dbd-bot:9000', 'hues-and-cues': 'http://hues-and-cues:9000' },
+      upstreams: {
+        'dbd-bot': { url: 'http://dbd-bot:9000', token: 'b'.repeat(64) },
+        'hues-and-cues': { url: 'http://hues-and-cues:9000', token: 'h'.repeat(64) },
+      },
       cookieSecure: false,
     });
     expect(loadConfig({ ...REQUIRED, NODE_ENV: 'production' }).cookieSecure).toBe(true);
   });
 
-  it('requires the password, public URL and token', () => {
+  it('requires the password, public URL and a token per app', () => {
     expect(() => loadConfig({})).toThrow(
-      /ADMIN_PASSWORD[\s\S]*PUBLIC_URL[\s\S]*INTERNAL_API_TOKEN/u,
+      /ADMIN_PASSWORD[\s\S]*PUBLIC_URL[\s\S]*DBD_BOT_API_TOKEN[\s\S]*HUES_API_TOKEN/u,
     );
   });
 
@@ -30,8 +34,6 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ ...REQUIRED, PUBLIC_URL: 'https://x.example.com/' })).toThrow(
       /PUBLIC_URL/u,
     );
-    expect(() => loadConfig({ ...REQUIRED, INTERNAL_API_TOKEN: 'short' })).toThrow(
-      /INTERNAL_API_TOKEN/u,
-    );
+    expect(() => loadConfig({ ...REQUIRED, HUES_API_TOKEN: 'short' })).toThrow(/HUES_API_TOKEN/u);
   });
 });

@@ -9,7 +9,7 @@ to `main`.
                            │
             ┌──────────────▼───────────────┐
             │ caddy                        │  infra/caddy + infra/sites-available
-            │  DOMAIN/admin/* ──► admin:8080 ───┐ Bearer INTERNAL_API_TOKEN
+            │  DOMAIN/admin/* ──► admin:8080 ───┐ Bearer <per-app token>
             │  DOMAIN ──────────► dbd-bot:8080  ├──► dbd-bot:9000 (internal)
             │  HUES_DOMAIN ─────► hues-and-cues:8080
             └──────────────────────────────┘    └──► hues-and-cues:9000 (internal)
@@ -19,14 +19,16 @@ to `main`.
 The shared [admin dashboard](../apps/admin/README.md) is served at `https://<DOMAIN>/admin/<ADMIN_PATH>`,
 the bot's original admin URL. It manages every app through each app's internal admin API on port
 9000. Caddy never routes to that port, so it is reachable only on the private Docker network, and
-every call needs the shared token in `env/internal.env`. The token is generated on the server by the
-first deploy and kept from then on.
+every call needs that app's own token from `env/internal-<app>.env`, so a compromised app can't use
+another app's API. The tokens are generated on the server by the first deploy and kept from then
+on; only the dashboard holds all of them (`env/internal-admin.env`).
 
 | Path on the VM                     | Contents                                                               |
 | ---------------------------------- | ---------------------------------------------------------------------- |
 | `docker-compose.yml`, `caddy/`, `sites-available/`, `scripts/` | Copied from `infra/` on every deploy  |
 | `env/*.env`                        | Per-app configuration, written from GitHub secrets on every deploy     |
-| `env/internal.env`                 | Internal API token, generated once on the server; never in GitHub      |
+| `env/internal-*.env`               | Internal API tokens, generated once on the server; never in GitHub     |
+| `deploy.log`                       | Output of the latest `deploy.sh` run                                   |
 | `caddy/sites/`                     | Sites currently published (managed by `deploy.sh`)                     |
 | `data/dbd-bot/`                    | Bot database (`bot.db`)                                                |
 | `data/hues-and-cues/`              | Hues & Cues database (`hues.db`)                                       |
@@ -35,7 +37,8 @@ first deploy and kept from then on.
 
 1. **CI** lints, tests and builds every app.
 2. **Plan** works out which apps changed since the last successful deploy (not just since the last
-   push, so changes from cancelled or failed runs are never skipped).
+   push, so changes from cancelled or failed runs are never skipped). It refuses to run on any
+   branch other than `main`.
 3. **Build** produces `linux/amd64` + `linux/arm64` images for the changed apps only and pushes them to
    `ghcr.io/kamoras/stream-tools/<app>`, tagged `latest` and `sha-<commit>`.
 4. **Deploy** copies `infra/` to the VM, writes `env/*.env` from secrets and runs
@@ -44,7 +47,8 @@ first deploy and kept from then on.
      the other apps;
    - pulls the changed apps' images and runs `docker compose up -d`, which recreates only containers
      whose image or configuration changed;
-   - waits for each deployed app's health check, then validates and hot-reloads Caddy.
+   - waits for every app's health check (a configuration change can recreate any of them), then
+     validates and hot-reloads Caddy.
 5. **Smoke test** checks each app over HTTPS from outside.
 
 ## One-time setup
@@ -127,10 +131,11 @@ Under **Settings → Secrets and variables → Actions**, add:
 | Secret           | Required | Description                                                            |
 | ---------------- | :------: | ---------------------------------------------------------------------- |
 | `ADMIN_PASSWORD` |    ✅    | The admin password                                                     |
-| `ADMIN_PATH`     |    ✅    | Secret URL segment, e.g. output of `openssl rand -hex 12`             |
+| `ADMIN_PATH`     |    ✅    | Secret URL segment of letters, numbers, `_` or `-`, e.g. output of `openssl rand -hex 12` |
 
-These are the bot's original admin secrets, so an existing setup needs no changes. The dashboard
-is at `https://<DOMAIN>/admin/<ADMIN_PATH>`.
+These are the bot's original admin secrets, so an existing setup needs no changes, unless
+`ADMIN_PATH` contains other characters: the deploy then stops with an error asking you to change
+it. The dashboard is at `https://<DOMAIN>/admin/<ADMIN_PATH>`.
 
 **dbd-bot**: see [apps/dbd-bot/README.md](../apps/dbd-bot/README.md#deployment). `DOMAIN` is the
 bot's hostname.
@@ -162,10 +167,14 @@ in [`migrate-from-dbd-bot.sh`](../infra/scripts/migrate-from-dbd-bot.sh):
 3. The new stack starts and every app must pass its health check.
 4. On success, `/opt/dbd-bot` is kept as `/opt/dbd-bot.pre-stream-tools` for reference and can be
    deleted once you're happy.
-5. On any failure, the new stack is removed and **the old stack is restarted unchanged**.
+5. If `deploy.sh` fails at any point, including the GitHub job being cancelled or timing out
+   mid-run (the script keeps running and logs to `deploy.log`), the new stack is removed and **the
+   old stack is restarted from its own untouched files**. Anything the new bot wrote in the
+   meantime (for example an invite used or a channel added) is discarded with it.
 
 The bot is unavailable only between steps 2 and 3, a few seconds in rehearsal. Nothing needs to be
-done by hand.
+done by hand. The smoke test runs after a successful migration; if only it fails, the new stack
+stays up (see Troubleshooting).
 
 ## Operations
 
@@ -187,8 +196,10 @@ with `sudo apt-get install sqlite3`.
 
 - **Smoke test fails but `deploy.sh` succeeded.** Check that the app's DNS record points at the VM,
   then look for certificate errors with `sudo docker compose logs caddy`.
-- **`dbd-bot did not become healthy`.** The bot reports healthy only once it is connected to Twitch
-  chat; check its token and `sudo docker compose logs dbd-bot`.
+- **`dbd-bot did not become healthy`.** The container health check (`/health/live`) only needs the
+  bot's web server to be up, so this means it crashed or failed to start: check
+  `sudo docker compose logs dbd-bot`. The public `/health` used by the smoke test additionally
+  requires the Twitch chat connection; if only that fails, reconnect via the admin dashboard.
 - **A site isn't published.** `deploy.sh` logs `not published (… is not set)` when its domain secret
   is missing.
 - **Permission denied writing data.** Both app images run as uid 1000:

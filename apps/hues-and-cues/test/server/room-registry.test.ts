@@ -85,6 +85,46 @@ describe('RoomRegistry', () => {
     expect(reloaded.get(room.id)).toBeUndefined();
   });
 
+  it('skips stored state that is valid JSON but inconsistent', () => {
+    const registry = createRegistry();
+    const { room } = registry.getOrCreate(alice, 'streamer');
+    room.execute({ type: 'drawCard' });
+    registry.flush();
+    const stored = db
+      .prepare<[string], { game: string }>('SELECT game FROM rooms WHERE id = ?')
+      .get(room.id);
+    const game = JSON.parse(stored?.game ?? '') as { round: { targetIndex: number } };
+    game.round.targetIndex = 99;
+    db.prepare('UPDATE rooms SET game = ? WHERE id = ?').run(JSON.stringify(game), room.id);
+    const reloaded = createRegistry();
+    expect(() => {
+      reloaded.load();
+    }).not.toThrow();
+    expect(reloaded.get(room.id)).toBeUndefined();
+  });
+
+  it('replaces an unloadable room when the owner recreates it', () => {
+    const registry = createRegistry();
+    const { room } = registry.getOrCreate(alice, 'streamer');
+    db.prepare("UPDATE rooms SET game = '{not json' WHERE id = ?").run(room.id);
+    const reloaded = createRegistry();
+    reloaded.load();
+    const recreated = reloaded.getOrCreate(alice, 'streamer');
+    expect(recreated.created).toBe(true);
+    recreated.room.execute({ type: 'drawCard' });
+    reloaded.flush();
+    expect(db.prepare('SELECT id FROM rooms').all()).toEqual([{ id: recreated.room.id }]);
+  });
+
+  it('disconnects clients when a room is deleted', () => {
+    const registry = createRegistry();
+    const { room } = registry.getOrCreate(alice, 'streamer');
+    const closed: number[] = [];
+    room.attach({ role: 'overlay', send: () => undefined, close: (code) => closed.push(code) });
+    registry.delete(room.id, alice);
+    expect(closed).toEqual([4404]);
+  });
+
   it('deletes only rooms the user owns', () => {
     const registry = createRegistry();
     const { room } = registry.getOrCreate(alice, 'streamer');
@@ -120,7 +160,7 @@ describe('RoomRegistry', () => {
     const registry = createRegistry();
     const idle = registry.getOrCreate(alice, 'idle_room').room;
     const watched = registry.getOrCreate(alice, 'watched').room;
-    watched.attach({ role: 'overlay', send: () => undefined });
+    watched.attach({ role: 'overlay', send: () => undefined, close: () => undefined });
     clock.advance(5000);
     expect(registry.prune()).toBe(1);
     expect(registry.get(idle.id)).toBeUndefined();

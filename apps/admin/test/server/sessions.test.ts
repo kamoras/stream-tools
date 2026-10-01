@@ -42,6 +42,8 @@ describe('AdminSessions', () => {
       error = e as LoginError;
     }
     expect(error?.retryAfterSeconds).toBe(60);
+    // Throttling is per client: another client is unaffected.
+    expect(sessions.login('pw', 'other-client')).toBeTypeOf('string');
     clock.advance(60_001);
     expect(sessions.login('pw')).toBeTypeOf('string');
   });
