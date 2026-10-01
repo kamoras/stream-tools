@@ -19,21 +19,33 @@ export function pointsForGuess(guess: Coord, target: Coord): number {
 }
 
 /**
- * Splits a cue into words. Anything that isn't a letter, accent, digit or
- * apostrophe separates words (spaces, any dash, commas, dots, "+", "&"), so
- * "sky—blue" or "red,green" can't pass as one word. Invisible formatting
- * characters (zero-width spaces, soft hyphens) are removed first.
+ * The cue in the form it is checked in, so look-alikes can't sneak past:
+ * compatibility forms folded (full-width "ＢＬＵＥ", keycap "1️⃣"), accents
+ * removed ("réd" is "red"), invisible characters removed (zero-width spaces,
+ * soft hyphens, variation selectors, fillers) and lower-cased.
  */
-function splitWords(text: string): string[] {
+function checkForm(text: string): string {
   return text
-    .replace(/\p{Cf}/gu, '')
-    .split(/[^\p{L}\p{M}\p{N}'’]+/u)
-    .filter((word) => word !== '');
+    .normalize('NFKD')
+    .replace(/[\p{M}\p{Default_Ignorable_Code_Point}]/gu, '')
+    .toLowerCase();
 }
 
-/** Words in a cue, ignoring punctuation and emoji (see {@link cueWords}). */
+/** Characters that separate words: anything but letters, digits and apostrophes. */
+const WORD_SEPARATOR = /[^\p{L}\p{N}'’]+/u;
+
+/**
+ * Words as the streamer would count them: punctuation, dashes and emoji
+ * separate words, while an apostrophe keeps "don't" or "o'clock" one word.
+ */
+function countedWords(text: string): string[] {
+  return checkForm(text)
+    .split(WORD_SEPARATOR)
+    .filter((word) => /[\p{L}\p{N}]/u.test(word));
+}
+
 export function countWords(text: string): number {
-  return cueWords(text).length;
+  return countedWords(text).length;
 }
 
 /**
@@ -176,13 +188,15 @@ function isPositionWord(word: string): boolean {
   return isColumnNumber(word) || NUMBER_WORDS.has(word) || ROW_LETTER_PATTERN.test(word);
 }
 
-/** Lower-case words of a cue, without punctuation around them or a possessive "'s". */
+/**
+ * The words the rules are checked against (see {@link checkForm}).
+ * Possessives are dropped and apostrophes split words too, so "white's",
+ * "red'green" and "f'12" can't hide a forbidden word.
+ */
 export function cueWords(text: string): string[] {
-  // NFKC folds look-alikes such as full-width "ＢＬＵＥ" and composes accents.
-  return splitWords(text.normalize('NFKC').toLowerCase())
-    .map((word) =>
-      word.replace(/^[^\p{L}\p{M}\p{N}]+|[^\p{L}\p{M}\p{N}]+$/gu, '').replace(/['’]s$/u, ''),
-    )
+  return checkForm(text)
+    .replace(/['’]+s(?![\p{L}\p{N}])/gu, '')
+    .split(/[^\p{L}\p{N}]+/u)
     .filter((word) => word !== '');
 }
 
@@ -217,8 +231,13 @@ export function cueRuleViolation(
   if (words.length === 0) {
     return 'The cue needs at least one word.';
   }
-  if (words.length > limit) {
+  if (countWords(text) > limit) {
     return `Cue ${String(clueNumber)} may be at most ${String(limit)} word${limit === 1 ? '' : 's'}.`;
+  }
+  // Positions are also checked with apostrophes removed ("f'12" is F12).
+  const joined = countedWords(text).map((word) => word.replace(/['’]/gu, ''));
+  if (joined.some((word) => POSITION_PATTERN.test(word))) {
+    return "Cues can't refer to the board's letters or numbers.";
   }
   for (const word of words) {
     if (FORBIDDEN_COLOUR_PATTERN.test(word)) {

@@ -69,6 +69,9 @@ The official cue rules, enforced by default ("Enforce official cue rules"):
   "darker" or "paler", and no cue that only steers, such as "more", "up", "top left" or
   "north east". Phrases like "left bank" are fine.
 
+Cues are checked with accents, look-alike characters and invisible characters folded away, so
+"réd" or a full-width "ＲＥＤ" is treated as "red".
+
 The rules also forbid comparing the colour to objects in the room. That can't be checked
 automatically, so it's up to you.
 

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { cueRuleViolation, cueWords, pointsForGuess } from '../../src/shared/rules.js';
+import {
+  cueRuleViolation,
+  cueWords,
+  normalizeCue,
+  pointsForGuess,
+} from '../../src/shared/rules.js';
 
 const none = new Set<string>();
 
@@ -81,7 +86,9 @@ describe('cueRuleViolation', () => {
 
   it('folds full-width and decomposed characters', () => {
     expect(cueRuleViolation('ＢＬＵＥ', 1, none)).toMatch(/Basic colour names/u);
-    expect(cueRuleViolation('cafe\u0301', 1, new Set(['café']))).toMatch(/already given/u);
+    expect(cueRuleViolation('cafe\u0301', 1, new Set([normalizeCue('café')]))).toMatch(
+      /already given/u,
+    );
   });
 
   it('sees colour names in possessives', () => {
@@ -98,6 +105,31 @@ describe('cueRuleViolation', () => {
     expect(cueRuleViolation('even,lighter', 2, none)).toMatch(/first guesses/u);
     expect(cueRuleViolation('red,green', 1, none)).toMatch(/at most 1 word/u);
     expect(cueRuleViolation("don't", 1, none)).toBeNull();
+  });
+
+  it('sees through apostrophes, accents and invisible characters', () => {
+    const colour = /Basic colour names/u;
+    for (const cue of [
+      "red'green",
+      'red’green',
+      "red''s",
+      'réd',
+      'red\ufe0f',
+      're\u034fd',
+      'red\u3164',
+    ]) {
+      expect(cueRuleViolation(cue, 1, none)).toMatch(colour);
+    }
+    for (const cue of ["f'12", '12’f', '1\ufe0f\u20e32\ufe0f\u20e3', 'f12\u20e3']) {
+      expect(cueRuleViolation(cue, 1, none)).toMatch(/letters or numbers/u);
+    }
+    expect(cueRuleViolation("darker''s", 2, none)).toMatch(/first guesses/u);
+    expect(cueRuleViolation("ocean''s", 1, new Set(['ocean']))).toMatch(/already given/u);
+    expect(cueRuleViolation('\u2764\ufe0f', 1, none)).toMatch(/at least one word/u);
+    // Apostrophes still keep ordinary words whole for the word limit.
+    for (const cue of ["o'clock", "rock'n'roll", "don't"]) {
+      expect(cueRuleViolation(cue, 1, none)).toBeNull();
+    }
   });
 
   it('treats hyphens, underscores and slashes as word breaks', () => {
