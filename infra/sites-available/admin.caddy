@@ -1,0 +1,16 @@
+# requires: ADMIN_DOMAIN
+# The shared admin dashboard on its own domain. Only the secret
+# /admin/<ADMIN_PATH> prefix is served; everything else is a 404, so the domain
+# reveals nothing on its own.
+{$ADMIN_DOMAIN} {
+	handle /admin/* {
+		reverse_proxy admin:8080
+	}
+	handle {
+		respond 404
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+}

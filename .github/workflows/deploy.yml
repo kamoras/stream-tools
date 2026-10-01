@@ -233,6 +233,7 @@ jobs:
             cat > env/caddy.env <<'ENVEOF'
             DBD_BOT_DOMAIN=${{ secrets.DOMAIN }}
             HUES_DOMAIN=${{ secrets.HUES_DOMAIN }}
+            ADMIN_DOMAIN=${{ secrets.ADMIN_DOMAIN }}
             ENVEOF
 
             cat > env/dbd-bot.env <<'ENVEOF'
@@ -256,11 +257,12 @@ jobs:
             sed -i -E '/^[A-Z_]+=$/d' env/hues-and-cues.env
 
             # The shared admin dashboard: one login for every app, served at
-            # the bot's admin URL (https://DOMAIN/admin/ADMIN_PATH).
+            # https://ADMIN_DOMAIN/admin/ADMIN_PATH, or at the bot's admin URL
+            # (https://DOMAIN/admin/ADMIN_PATH) when ADMIN_DOMAIN is not set.
             cat > env/admin.env <<'ENVEOF'
             ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}
             ADMIN_PATH=${{ secrets.ADMIN_PATH }}
-            PUBLIC_URL=https://${{ secrets.DOMAIN }}
+            PUBLIC_URL=https://${{ secrets.ADMIN_DOMAIN || secrets.DOMAIN }}
             LOG_LEVEL=info
             ENVEOF
 
@@ -274,6 +276,7 @@ jobs:
         env:
           DBD_BOT_DOMAIN: ${{ secrets.DOMAIN }}
           HUES_DOMAIN: ${{ secrets.HUES_DOMAIN }}
+          ADMIN_HOST: ${{ secrets.ADMIN_DOMAIN || secrets.DOMAIN }}
           ADMIN_PATH: ${{ secrets.ADMIN_PATH }}
         run: |
           check() {
@@ -289,7 +292,7 @@ jobs:
           }
           status=0
           check "https://$DBD_BOT_DOMAIN/health" || status=1
-          check "https://$DBD_BOT_DOMAIN/admin/$ADMIN_PATH/api/session" || status=1
+          check "https://$ADMIN_HOST/admin/$ADMIN_PATH/api/session" || status=1
           if [ -n "$HUES_DOMAIN" ]; then
             check "https://$HUES_DOMAIN/healthz" || status=1
           else
