@@ -1,3 +1,8 @@
 {$DOMAIN} {
     reverse_proxy bot:8080
 }
+
+# Other apps hosted on this VM (e.g. kamoras/hues-and-cues-twitch) drop a site
+# file into /opt/caddy/sites on the host and join the shared `edge` Docker
+# network. With no files present Caddy just logs a warning.
+import /etc/caddy/sites/*.caddy

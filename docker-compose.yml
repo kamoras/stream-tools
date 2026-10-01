@@ -24,9 +24,18 @@ services:
     env_file: .env
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - /opt/caddy/sites:/etc/caddy/sites:ro
       - caddy_data:/data
       - caddy_config:/config
+    networks:
+      - default
+      - edge
 
 volumes:
   caddy_data:
   caddy_config:
+
+networks:
+  # Shared with other apps on this VM so Caddy can proxy to them.
+  edge:
+    external: true

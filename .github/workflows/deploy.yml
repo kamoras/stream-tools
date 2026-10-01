@@ -74,9 +74,11 @@ jobs:
           key: ${{ secrets.ORACLE_SSH_KEY }}
           script: |
             sudo systemctl enable docker
-            sudo mkdir -p /opt/dbd-bot/data
+            sudo mkdir -p /opt/dbd-bot/data /opt/caddy/sites
             sudo chown -R $USER:$USER /opt/dbd-bot
             sudo chown -R 1000:1000 /opt/dbd-bot/data
+            # Shared network/site directory so other apps on this VM can sit behind Caddy.
+            sudo docker network inspect edge >/dev/null 2>&1 || sudo docker network create edge
 
       - name: Copy config files to server
         uses: appleboy/scp-action@v1.0.0

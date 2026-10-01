@@ -268,6 +268,16 @@ cp /opt/dbd-bot/data/bot.db ~/dbd-bot-backup.db
 4. They visit `https://YOUR_DOMAIN`, enter the code and their channel name.
 5. Recommended: they type `/mod YOUR_BOT_USERNAME` in their chat to give the bot moderator status (prevents Twitch rate-limiting the bot's messages).
 
+### Hosting other apps on the same VM
+
+Caddy owns ports 80/443, so other projects on this VM are served through it rather than running their own proxy:
+
+- The deploy workflow creates a shared Docker network named `edge` and the directory `/opt/caddy/sites`.
+- Caddy joins `edge` and imports every `/opt/caddy/sites/*.caddy` file.
+- Another app attaches its container to `edge`, writes a site file such as `hues.example.com { reverse_proxy my-app:8080 }` into `/opt/caddy/sites`, then reloads Caddy with `sudo docker exec dbd-caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile`.
+
+[Hues & Cues](https://github.com/kamoras/hues-and-cues-twitch) is deployed this way. With no site files present, Caddy just logs a warning and serves the bot as before.
+
 ---
 
 ## Admin Dashboard
