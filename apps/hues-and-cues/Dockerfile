@@ -1,7 +1,10 @@
 # syntax=docker/dockerfile:1.7
 
 # ---- Build -------------------------------------------------------------------
-FROM node:22-alpine AS build
+# Runs on the build machine's own platform: the output (dist/) is plain
+# JavaScript, so it doesn't need building per target. Building it under ARM
+# emulation is slow and can crash Node outright.
+FROM --platform=$BUILDPLATFORM node:22-alpine AS build
 WORKDIR /app
 # better-sqlite3 falls back to compiling from source when no prebuilt binary fits.
 RUN apk add --no-cache python3 make g++
