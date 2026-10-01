@@ -10,6 +10,13 @@ describe('cueRuleViolation', () => {
     }
     expect(cueRuleViolation('a lemon', 2, none)).toBeNull();
     expect(cueRuleViolation('i scream', 2, none)).toBeNull();
+    // Numbers and direction words are fine when they don't point at the board.
+    for (const cue of ['cloud nine', 'first light', 'seventh heaven', 'cloud 9']) {
+      expect(cueRuleViolation(cue, 2, none)).toBeNull();
+    }
+    for (const cue of ['left bank', 'down under', 'right whale', 'more moss']) {
+      expect(cueRuleViolation(cue, 2, none)).toBeNull();
+    }
   });
 
   it('limits cue 1 to one word and cue 2 to two', () => {
@@ -39,7 +46,17 @@ describe('cueRuleViolation', () => {
   });
 
   it("forbids the board's letters and numbers", () => {
-    for (const cue of ['F12', '12F', '7', 'f', 'twelve', 'twelfth', 'twenty-one']) {
+    for (const cue of [
+      'F12',
+      '12F',
+      '7',
+      '12th',
+      'f',
+      'row f',
+      'twelve',
+      'twelfth',
+      'twenty-one',
+    ]) {
       expect(cueRuleViolation(cue, 2, none)).toMatch(/letters or numbers/u);
     }
   });
@@ -52,6 +69,10 @@ describe('cueRuleViolation', () => {
     expect(cueRuleViolation('the sea', 2, new Set(['the moon']))).toBeNull();
   });
 
+  it('needs at least one word', () => {
+    expect(cueRuleViolation('!!!', 1, new Set(['']))).toMatch(/at least one word/u);
+  });
+
   it('treats hyphens, underscores and slashes as word breaks', () => {
     expect(cueRuleViolation('deep-sea', 1, none)).toMatch(/at most 1 word/u);
     expect(cueRuleViolation('sky-blue', 2, none)).toMatch(/Basic colour names/u);
@@ -59,7 +80,7 @@ describe('cueRuleViolation', () => {
   });
 
   it('forbids pointing from the first guesses in cue 2 only', () => {
-    for (const cue of ['slightly darker', 'paler', 'more', 'warmer']) {
+    for (const cue of ['slightly darker', 'paler', 'warmer', 'more', 'down left', 'slightly up']) {
       expect(cueRuleViolation(cue, 2, none)).toMatch(/first guesses/u);
     }
     expect(cueRuleViolation('down', 1, none)).toBeNull();
