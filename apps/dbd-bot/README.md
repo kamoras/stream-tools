@@ -17,7 +17,7 @@ One bot instance serves multiple streamers. Streamers self-onboard through an in
 - **Live-only presence** — the bot joins a channel when its stream goes live and leaves (closing and clearing the queue) when it ends, via reconciliation polling with optional instant webhooks (requires Twitch app credentials)
 - **Multi-channel** — one bot instance serves multiple streamers
 - **Invite-only onboarding** — streamers self-connect via a landing page using single-use invite codes
-- **Admin dashboard** — generate/revoke invite codes, monitor connected channels and live presence, manually join/leave, and watch webhook activity
+- **Admin dashboard** — generate/revoke invite codes, monitor connected channels and live presence, manually join/leave, and watch webhook activity, in the shared [stream-tools admin dashboard](../admin/README.md)
 - **DbD extras** — random killer, survivor, perk, map, and Entity messages
 - **Free hosting** — runs on Oracle Cloud Always Free tier (no expiry; credit card required to sign up)
 - **Auto-deploy** — GitHub Actions builds, pushes, and deploys whenever bot code changes on `main`
@@ -69,8 +69,8 @@ All configuration is done via environment variables. In production these are set
 | `TWITCH_BOT_TOKEN` | ✅* | — | OAuth token for the bot, prefixed with `oauth:`. *Not required if `TWITCH_BOT_REFRESH_TOKEN` is set. |
 | `TWITCH_BOT_REFRESH_TOKEN` | | — | One-time seed token that lets the bot refresh its own chat login forever instead of `TWITCH_BOT_TOKEN` expiring every few weeks. Requires `TWITCH_CLIENT_ID`/`TWITCH_CLIENT_SECRET`. See below. |
 | `DOMAIN` | ✅ | — | Your domain — Caddy uses this for TLS and the webhook URL |
-| `ADMIN_PASSWORD` | ✅ | — | Password for the admin dashboard |
-| `ADMIN_PATH` | ✅ | — | Secret URL slug — admin lives at `https://YOUR_DOMAIN/admin/YOUR_ADMIN_PATH` |
+| `INTERNAL_API_TOKEN` | | — | Enables the internal admin API used by the shared admin dashboard (generated on the server in production) |
+| `INTERNAL_API_PORT` | | `9000` | Port of the internal admin API — never exposed publicly |
 | `BOT_PREFIX` | | `!dbd ` | Command prefix (trailing space required for multi-word prefixes) |
 | `BOT_JOIN_MESSAGE` | | themed default | Message the bot posts when it enters a channel's chat |
 | `QUEUE_ROLES_MODE` | | `both` | `off` · `both` · `survivor` · `killer` |
@@ -104,7 +104,7 @@ Once set up, the bot refreshes its own chat login before it expires and persists
 
 Requires `TWITCH_CLIENT_ID` and `TWITCH_CLIENT_SECRET` from a [Twitch Developer Console](https://dev.twitch.tv/console) app. Add both `http://localhost` (for the quick/manual flow above) and `https://YOUR_DOMAIN/admin/YOUR_ADMIN_PATH/twitch-callback` to the app's OAuth Redirect URLs.
 
-*Via the admin dashboard (easiest):* once `TWITCH_CLIENT_ID`/`TWITCH_CLIENT_SECRET` and `ADMIN_PASSWORD`/`ADMIN_PATH` are set and the bot is deployed, open the admin dashboard, sign in as the bot's Twitch account in the browser, and click **Connect via Twitch** in the "Chat Login" card. The bot exchanges the code, stores the refresh token, and restarts itself to pick it up.
+*Via the admin dashboard (easiest):* once `TWITCH_CLIENT_ID`/`TWITCH_CLIENT_SECRET` are set and the bot is deployed, open the [admin dashboard](../admin/README.md), sign in as the bot's Twitch account in the browser, and click **Connect via Twitch** in the bot's "Chat login" card. The dashboard hands the code to the bot, which exchanges it, stores the refresh token, and restarts itself to pick it up.
 
 *Manually, if you'd rather not deploy first:*
 
@@ -136,14 +136,13 @@ npm install
 
 # 2. Configure
 cp .env.example .env
-# Fill in at minimum: TWITCH_BOT_USERNAME, TWITCH_BOT_TOKEN,
-# ADMIN_PASSWORD, ADMIN_PATH
+# Fill in at minimum: TWITCH_BOT_USERNAME, TWITCH_BOT_TOKEN
 
 # 3. Run with auto-reload
 npm run dev
 ```
 
-The landing page is at `http://localhost:8080`. The admin dashboard is at `http://localhost:8080/admin/YOUR_ADMIN_PATH`.
+The landing page is at `http://localhost:8080`. To use the admin dashboard locally, also set `INTERNAL_API_TOKEN` and run [apps/admin](../admin/README.md) pointed at the bot's internal port.
 
 To onboard a test channel, generate a local invite code:
 
@@ -170,8 +169,6 @@ The bot is deployed with the rest of [stream-tools](../../README.md) to the shar
 | `TWITCH_BOT_USERNAME` | ✅ | Bot's Twitch username |
 | `TWITCH_BOT_TOKEN` | ✅ | Bot's OAuth token (`oauth:...`) |
 | `DOMAIN` | ✅ | The bot's domain (e.g. `bot.yourdomain.com`) |
-| `ADMIN_PASSWORD` | ✅ | Password for the admin dashboard |
-| `ADMIN_PATH` | ✅ | Secret URL segment for the admin dashboard |
 | `QUEUE_ROLES_MODE` | | Defaults to `both` |
 | `QUEUE_MAX_SIZE` | | Defaults to `20` |
 | `BOT_PREFIX` | | Defaults to `!dbd ` (include the trailing space) |
@@ -188,8 +185,8 @@ sudo sqlite3 /opt/stream-tools/data/dbd-bot/bot.db ".backup /tmp/dbd-bot-backup.
 
 ### Onboard a channel
 
-1. Visit `https://YOUR_DOMAIN/admin/YOUR_ADMIN_PATH` and sign in.
-2. Click **Generate Code** — the code is shown only to you, never in any log.
+1. Visit the admin dashboard at `https://YOUR_DOMAIN/admin/YOUR_ADMIN_PATH` and sign in.
+2. In the bot's **Invite codes** card, click **Generate Code** — the code is shown only to you, never in any log.
 3. Share the code with the streamer.
 4. They visit `https://YOUR_DOMAIN`, enter the code and their channel name.
 5. Recommended: they type `/mod YOUR_BOT_USERNAME` in their chat to give the bot moderator status (prevents Twitch rate-limiting the bot's messages).
@@ -198,14 +195,14 @@ sudo sqlite3 /opt/stream-tools/data/dbd-bot/bot.db ".backup /tmp/dbd-bot-backup.
 
 ## Admin Dashboard
 
-The admin dashboard at `https://YOUR_DOMAIN/admin/YOUR_ADMIN_PATH` provides:
+The bot has no admin pages of its own. It is managed from the shared [stream-tools admin dashboard](../admin/README.md) at `https://YOUR_DOMAIN/admin/YOUR_ADMIN_PATH` (one login for every app), which provides for the bot:
 
 - **Bot status** — connection state, uptime, active channel count, current prefix
 - **Invite codes** — generate single-use codes; revoke any pending code before it's used
 - **Connected channels** — all onboarded channels with queue size, open/closed state, and whether the bot is currently in chat; per-channel **Join**/**Leave** (manual presence override) and **Disconnect** buttons
 - **Webhook activity** — EventSub delivery stats (received, rejected) and a log of recent stream-start, stream-end, and subscription-revoked events
 
-Sessions last 8 hours. The admin URL itself is secret — any other `/admin/*` path returns 404.
+The dashboard reaches the bot through a small internal JSON API (`src/admin-api.js`) on port 9000. It is only reachable on the server's private Docker network and requires the shared `INTERNAL_API_TOKEN`.
 
 ---
 
@@ -218,7 +215,7 @@ The bot joins a channel's chat only while its stream is live and leaves (closing
 
 Correctness never depends on webhook delivery: webhooks only reduce latency, and the poll reconciles state on every cycle, so a missed or undelivered webhook is self-corrected within one interval. The two layers are intentionally redundant.
 
-On `stream.offline` (or when a poll finds a channel no longer live) the queue is closed and cleared and the bot posts a message before leaving. Disconnecting a channel from the admin panel also removes its EventSub subscriptions, and the admin panel has manual **Join**/**Leave** buttons to override presence when needed.
+On `stream.offline` (or when a poll finds a channel no longer live) the queue is closed and cleared and the bot posts a message before leaving. Disconnecting a channel from the admin dashboard also removes its EventSub subscriptions, and the dashboard has manual **Join**/**Leave** buttons to override presence when needed.
 
 Without any Twitch credentials, the bot can't tell who's live and falls back to permanently sitting in every connected channel.
 

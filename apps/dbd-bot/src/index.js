@@ -3,7 +3,8 @@
 require('dotenv').config({ quiet: true });
 const db = require('./db');
 const { createBot } = require('./bot');
-const { createWebServer } = require('./web');
+const { createWebServer, getWebhookStats, START_TIME } = require('./web');
+const { createAdminApi } = require('./admin-api');
 const eventsub = require('./eventsub');
 
 const eventSubConfig = {
@@ -117,26 +118,48 @@ const app = createWebServer({
   domain: process.env.DOMAIN || '',
   webhookSecret: eventSubConfig.webhookSecret,
   onChannelAdded,
-  onChannelRemoved,
-  joinChannel,
-  leaveChannel,
   isConnected,
-  getChannelStats,
-  getJoinedChannels,
   onStreamOnline,
   onStreamOffline,
-  twitchClientId: eventSubConfig.clientId,
-  twitchClientSecret: eventSubConfig.clientSecret,
-  chatSelfRefreshing: refreshTokenEnabled,
-  // The admin dashboard's "Connect via Twitch" flow persists a new refresh
-  // token to the db, but this process already picked its auth mode at boot
-  // (config.botToken above) — restarting is the simplest way to pick it up,
-  // relying on docker-compose's `restart: unless-stopped` to bring it back.
-  restartToApplyAuth: () => {
-    console.log('[bot] New Twitch chat login saved — restarting to apply it...');
-    setTimeout(() => shutdown(0), 500);
-  },
 });
+
+// Internal admin API for the shared stream-tools dashboard (apps/admin). Only
+// started when INTERNAL_API_TOKEN is set; its port is never published through
+// Caddy, so it is reachable only on the private Docker network.
+const internalApiToken = process.env.INTERNAL_API_TOKEN || '';
+const internalApiPort = Number(process.env.INTERNAL_API_PORT || 9000);
+let adminApiServer = null;
+if (internalApiToken) {
+  const adminApi = createAdminApi({
+    token: internalApiToken,
+    botName: config.botUsername,
+    prefix: config.prefix,
+    startTime: START_TIME,
+    isConnected,
+    getChannelStats,
+    getJoinedChannels,
+    getWebhookStats: () => ({ enabled: Boolean(eventSubConfig.webhookSecret), ...getWebhookStats() }),
+    onChannelRemoved,
+    joinChannel,
+    leaveChannel,
+    twitchClientId: eventSubConfig.clientId,
+    twitchClientSecret: eventSubConfig.clientSecret,
+    chatSelfRefreshing: refreshTokenEnabled,
+    // The dashboard's "Connect via Twitch" flow persists a new refresh token
+    // to the db, but this process already picked its auth mode at boot
+    // (config.botToken above) — restarting is the simplest way to pick it up,
+    // relying on docker-compose's `restart: unless-stopped` to bring it back.
+    restartToApplyAuth: () => {
+      console.log('[bot] New Twitch chat login saved — restarting to apply it...');
+      setTimeout(() => shutdown(0), 500);
+    },
+  });
+  adminApiServer = adminApi.listen(internalApiPort, () => {
+    console.log(`[admin-api] Listening on internal port ${internalApiPort}`);
+  });
+} else {
+  console.log('[admin-api] INTERNAL_API_TOKEN not set — admin API disabled');
+}
 
 app.listen(config.port, () => {
   console.log(`[web] Listening on port ${config.port}`);
@@ -235,6 +258,7 @@ client.connect().catch(err => {
 
 async function shutdown(code) {
   if (pollTimer) clearInterval(pollTimer);
+  if (adminApiServer) adminApiServer.close();
   try {
     await client.disconnect();
   } catch {

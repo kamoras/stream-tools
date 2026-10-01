@@ -12,21 +12,15 @@ const { createWebServer, _resetRateLimiterForTesting } = require('../src/web');
 
 const app = createWebServer({ botName: 'testbot' });
 
-// A second instance with admin enabled, capturing the calls it makes to the bot.
-const calls = { added: [], removed: [], joined: [], left: [], online: [], offline: [] };
+// A second instance with webhooks enabled, capturing the calls it makes to the bot.
+const calls = { added: [], online: [], offline: [] };
 const WEBHOOK_SECRET = 'test-webhook-secret';
-process.env.ADMIN_PASSWORD = 'secret';
-process.env.ADMIN_PATH = 'admin';
-const adminApp = createWebServer({
+const webhookApp = createWebServer({
   botName: 'testbot',
   webhookSecret: WEBHOOK_SECRET,
   onChannelAdded: async (ch) => { calls.added.push(ch); },
-  onChannelRemoved: async (ch) => { calls.removed.push(ch); },
-  joinChannel: async (ch) => { calls.joined.push(ch); },
-  leaveChannel: async (ch) => { calls.left.push(ch); },
   onStreamOnline: (ch) => { calls.online.push(ch); },
   onStreamOffline: (ch) => { calls.offline.push(ch); },
-  getJoinedChannels: () => [...calls.joined],
 });
 
 beforeEach(() => {
@@ -34,21 +28,13 @@ beforeEach(() => {
   for (const k of Object.keys(calls)) calls[k].length = 0;
 });
 
-async function adminLogin() {
-  const res = await request(adminApp)
-    .post('/admin/admin/login')
-    .type('form')
-    .send({ password: 'secret' });
-  return res.headers['set-cookie'];
-}
-
 // Builds a request that mimics how Twitch signs EventSub deliveries.
 function signedWebhook(messageType, payload, { secret = WEBHOOK_SECRET, messageId, timestamp } = {}) {
   const id = messageId ?? crypto.randomBytes(8).toString('hex');
   const ts = timestamp ?? new Date().toISOString();
   const raw = JSON.stringify(payload);
   const hmac = crypto.createHmac('sha256', secret).update(id + ts + raw).digest('hex');
-  return request(adminApp)
+  return request(webhookApp)
     .post('/webhook/twitch')
     .set('Twitch-Eventsub-Message-Id', id)
     .set('Twitch-Eventsub-Message-Timestamp', ts)
@@ -167,97 +153,12 @@ describe('POST /onboard', () => {
   });
 });
 
-describe('POST /admin/:path/disconnect', () => {
-  it('rejects unauthenticated requests', async () => {
-    db.addChannel('victim', 'victim');
-    const res = await request(adminApp)
-      .post('/admin/admin/disconnect')
-      .type('form')
-      .send({ channel: 'victim' });
-    // No session → redirected back to the login page, channel untouched.
-    assert.equal(res.status, 302);
-    assert.equal(db.channelExists('victim'), true);
-    assert.deepEqual(calls.removed, []);
-  });
-
-  it('removes the channel and tears down its subscriptions when authenticated', async () => {
-    db.addChannel('leaver', 'leaver');
-    const cookie = await adminLogin();
-    const res = await request(adminApp)
-      .post('/admin/admin/disconnect')
-      .set('Cookie', cookie)
-      .type('form')
-      .send({ channel: 'leaver' });
-    assert.equal(res.status, 302);
-    assert.equal(db.channelExists('leaver'), false);
-    assert.deepEqual(calls.removed, ['leaver']);
-  });
-
-  it('ignores an invalid channel name without removing anything', async () => {
-    const cookie = await adminLogin();
-    const res = await request(adminApp)
-      .post('/admin/admin/disconnect')
-      .set('Cookie', cookie)
-      .type('form')
-      .send({ channel: 'bad name!' });
-    assert.equal(res.status, 302);
-    assert.deepEqual(calls.removed, []);
-  });
-});
-
-describe('GET /admin/:path (dashboard)', () => {
-  it('renders the dashboard with channel presence and controls when authenticated', async () => {
-    db.addChannel('dashchan', 'dashchan');
-    const cookie = await adminLogin();
-    const res = await request(adminApp).get('/admin/admin').set('Cookie', cookie);
-    assert.equal(res.status, 200);
-    assert.match(res.text, /#dashchan/);
-    assert.match(res.text, /Not in chat/);            // presence indicator
-    assert.match(res.text, /\/admin\/admin\/disconnect/); // disconnect control
-    assert.match(res.text, /\/admin\/admin\/join/);       // manual join control
-  });
-
-  it('includes responsive table markup for mobile (data labels + stacked-card CSS)', async () => {
-    db.addChannel('mobilechan', 'mobilechan');
-    const cookie = await adminLogin();
-    const res = await request(adminApp).get('/admin/admin').set('Cookie', cookie);
-    assert.match(res.text, /data-label="Channel"/);     // per-cell labels for stacked view
-    assert.match(res.text, /<td class="actions"/);       // action cell hook
-    assert.match(res.text, /@media\(max-width:580px\)/); // mobile breakpoint present
-    assert.match(res.text, /thead\{display:none\}/);     // tables collapse to cards
-  });
-
-  it('shows the login page without a session', async () => {
-    const res = await request(adminApp).get('/admin/admin');
-    assert.equal(res.status, 200);
-    assert.match(res.text, /Command Centre/);
-  });
-});
-
-describe('POST /admin/:path/join and /leave (manual override)', () => {
-  it('requires auth for join', async () => {
-    const res = await request(adminApp).post('/admin/admin/join').type('form').send({ channel: 'streamer' });
-    assert.equal(res.status, 302);
-    assert.deepEqual(calls.joined, []);
-  });
-
-  it('joins a known channel when authenticated', async () => {
-    db.addChannel('streamer', 'streamer');
-    const cookie = await adminLogin();
-    await request(adminApp).post('/admin/admin/join').set('Cookie', cookie).type('form').send({ channel: 'streamer' });
-    assert.deepEqual(calls.joined, ['streamer']);
-  });
-
-  it('will not manually join a channel that is not connected', async () => {
-    const cookie = await adminLogin();
-    await request(adminApp).post('/admin/admin/join').set('Cookie', cookie).type('form').send({ channel: 'stranger' });
-    assert.deepEqual(calls.joined, []);
-  });
-
-  it('leaves a channel when authenticated', async () => {
-    const cookie = await adminLogin();
-    await request(adminApp).post('/admin/admin/leave').set('Cookie', cookie).type('form').send({ channel: 'streamer' });
-    assert.deepEqual(calls.left, ['streamer']);
+describe('/admin/*', () => {
+  it('is not served by the bot (the dashboard is a separate service)', async () => {
+    for (const path of ['/admin', '/admin/admin', '/admin/anything/login']) {
+      const res = await request(app).get(path);
+      assert.equal(res.status, 404);
+    }
   });
 });
 
@@ -285,7 +186,7 @@ describe('POST /webhook/twitch', () => {
   it('rejects a bad signature with 403 and does not act', async () => {
     const id = 'msg-bad';
     const ts = new Date().toISOString();
-    const res = await request(adminApp)
+    const res = await request(webhookApp)
       .post('/webhook/twitch')
       .set('Twitch-Eventsub-Message-Id', id)
       .set('Twitch-Eventsub-Message-Timestamp', ts)
@@ -327,7 +228,7 @@ describe('POST /webhook/twitch', () => {
     const ts = new Date().toISOString();
     const raw = '{not json';
     const hmac = crypto.createHmac('sha256', WEBHOOK_SECRET).update(id + ts + raw).digest('hex');
-    const res = await request(adminApp)
+    const res = await request(webhookApp)
       .post('/webhook/twitch')
       .set('Twitch-Eventsub-Message-Id', id)
       .set('Twitch-Eventsub-Message-Timestamp', ts)
