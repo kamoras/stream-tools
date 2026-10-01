@@ -21,7 +21,8 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/kamoras/dead-by-daylight-twitch-bot.git"
+    "url": "git+https://github.com/kamoras/stream-tools.git",
+    "directory": "apps/dbd-bot"
   },
   "engines": {
     "node": ">=18.0.0"
