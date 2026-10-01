@@ -278,7 +278,9 @@ jobs:
         run: |
           check() {
             for attempt in $(seq 1 12); do
-              if curl -fsS --max-time 10 -o /dev/null "$1"; then echo "✓ $1"; return 0; fi
+              # Follow a few redirects but require a final 2xx: a bare 3xx (or a
+              # redirect loop, e.g. a CDN in front talking plain HTTP) is a failure.
+              if curl -fsS -L --max-redirs 3 --max-time 10 -o /dev/null "$1"; then echo "✓ $1"; return 0; fi
               echo "Attempt $attempt for $1 failed; retrying in 10s"
               sleep 10
             done

@@ -205,6 +205,12 @@ with `sudo apt-get install sqlite3`.
   bot's web server to be up, so this means it crashed or failed to start: check
   `sudo docker compose logs dbd-bot`. The public `/health` used by the smoke test additionally
   requires the Twitch chat connection; if only that fails, reconnect via the admin dashboard.
+- **"Too many redirects" behind Cloudflare.** A proxied (orange-cloud) record with SSL/TLS mode
+  "Flexible" makes Cloudflare talk plain HTTP to the server, which Caddy redirects to HTTPS, in a
+  loop. Either set the record to **DNS only** (grey cloud; Caddy already serves HTTPS with its own
+  certificate) or set SSL/TLS mode to **Full (strict)**. DNS only is preferable: through the proxy,
+  every visitor appears to come from a Cloudflare address, so the per-IP sign-in limits would
+  lump users together.
 - **A site isn't published.** `deploy.sh` logs `not published (… is not set)` when its domain secret
   is missing.
 - **Permission denied writing data.** Both app images run as uid 1000:
