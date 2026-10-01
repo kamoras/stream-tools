@@ -61,7 +61,20 @@ describe('cueRuleViolation', () => {
   });
 
   it("forbids the board's letters and numbers", () => {
-    for (const cue of ['F12', '12F', '7', '12th', 'f', 'f 12', 'twelve', 'twelfth', 'twenty-one']) {
+    for (const cue of [
+      'F12',
+      '12F',
+      '7',
+      '12th',
+      'f',
+      'f 12',
+      'twelve',
+      'twelfth',
+      'twenty-one',
+      "twelve's",
+      "f's",
+      "12's",
+    ]) {
       expect(cueRuleViolation(cue, 2, none)).toMatch(/letters or numbers/u);
     }
   });

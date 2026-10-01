@@ -255,7 +255,10 @@ export function cueRuleViolation(
     }
   }
   // Judged on whole words, so "I'm" isn't read as the row letters I and M.
-  if (countedWords(text).every((word) => isPositionWord(word.replace(/['’]/gu, '')))) {
+  const wholeWords = countedWords(text).map((word) =>
+    word.replace(/['’]+s$/u, '').replace(/['’]/gu, ''),
+  );
+  if (wholeWords.every(isPositionWord)) {
     return "Cues can't refer to the board's letters or numbers.";
   }
   if (clueNumber === 2 && words.every((word) => STEERING_WORDS.has(word))) {
