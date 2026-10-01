@@ -15,6 +15,7 @@ body:
       options:
         - dbd-bot (Dead by Daylight bot)
         - hues-and-cues (colour-guessing game)
+        - admin (shared admin dashboard)
         - Hosting / deployment
     validations:
       required: true

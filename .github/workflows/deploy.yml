@@ -23,7 +23,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  KNOWN_APPS: '["dbd-bot","hues-and-cues"]'
+  KNOWN_APPS: '["dbd-bot","hues-and-cues","admin"]'
 
 jobs:
   ci:
@@ -68,6 +68,7 @@ jobs:
           filters: |
             dbd-bot: apps/dbd-bot/**
             hues-and-cues: apps/hues-and-cues/**
+            admin: apps/admin/**
             infra: [infra/**, .github/workflows/deploy.yml]
       - id: plan
         env:
@@ -162,22 +163,13 @@ jobs:
           ORACLE_USER: ${{ secrets.ORACLE_USER }}
           ORACLE_SSH_KEY: ${{ secrets.ORACLE_SSH_KEY }}
           DOMAIN: ${{ secrets.DOMAIN }}
-          HUES_ADMIN_PASSWORD: ${{ secrets.HUES_ADMIN_PASSWORD }}
-          HUES_ADMIN_PATH: ${{ secrets.HUES_ADMIN_PATH }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          ADMIN_PATH: ${{ secrets.ADMIN_PATH }}
         run: |
           missing=0
-          for name in ORACLE_HOST ORACLE_USER ORACLE_SSH_KEY DOMAIN; do
+          for name in ORACLE_HOST ORACLE_USER ORACLE_SSH_KEY DOMAIN ADMIN_PASSWORD ADMIN_PATH; do
             if [ -z "${!name}" ]; then echo "::error::Secret $name is not set"; missing=1; fi
           done
-          # Hues & Cues refuses to start with only one of the pair.
-          has_password=$([ -n "$HUES_ADMIN_PASSWORD" ] && echo yes || echo no)
-          has_path=$([ -n "$HUES_ADMIN_PATH" ] && echo yes || echo no)
-          if [ "$has_password" != "$has_path" ]; then
-            echo "::error::Set both HUES_ADMIN_PASSWORD and HUES_ADMIN_PATH, or neither"
-            missing=1
-          elif [ -z "$HUES_ADMIN_PASSWORD" ]; then
-            echo "::warning::HUES_ADMIN_PASSWORD/HUES_ADMIN_PATH are not set, so no Hues & Cues invite codes can be generated and nobody can sign up."
-          fi
           exit $missing
 
       - name: Prepare server
@@ -237,21 +229,26 @@ jobs:
             BOT_PREFIX=${{ secrets.BOT_PREFIX || '!dbd ' }}
             PORT=8080
             DOMAIN=${{ secrets.DOMAIN }}
-            ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}
-            ADMIN_PATH=${{ secrets.ADMIN_PATH }}
             TWITCH_CLIENT_ID=${{ secrets.TWITCH_CLIENT_ID }}
             TWITCH_CLIENT_SECRET=${{ secrets.TWITCH_CLIENT_SECRET }}
             TWITCH_WEBHOOK_SECRET=${{ secrets.TWITCH_WEBHOOK_SECRET }}
             ENVEOF
 
             cat > env/hues-and-cues.env <<'ENVEOF'
-            ADMIN_PASSWORD=${{ secrets.HUES_ADMIN_PASSWORD }}
-            ADMIN_PATH=${{ secrets.HUES_ADMIN_PATH }}
             ALLOWED_CHANNELS=${{ secrets.HUES_ALLOWED_CHANNELS }}
             LOG_LEVEL=info
             ENVEOF
             # Drop unset optional settings so the app's defaults apply.
             sed -i -E '/^[A-Z_]+=$/d' env/hues-and-cues.env
+
+            # The shared admin dashboard: one login for every app, served at
+            # the bot's admin URL (https://DOMAIN/admin/ADMIN_PATH).
+            cat > env/admin.env <<'ENVEOF'
+            ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}
+            ADMIN_PATH=${{ secrets.ADMIN_PATH }}
+            PUBLIC_URL=https://${{ secrets.DOMAIN }}
+            LOG_LEVEL=info
+            ENVEOF
 
             # Short-lived login so pulls work whatever the package visibility.
             echo "$GHCR_TOKEN" | sudo docker login ghcr.io -u "$GHCR_USER" --password-stdin >/dev/null
@@ -263,6 +260,7 @@ jobs:
         env:
           DBD_BOT_DOMAIN: ${{ secrets.DOMAIN }}
           HUES_DOMAIN: ${{ secrets.HUES_DOMAIN }}
+          ADMIN_PATH: ${{ secrets.ADMIN_PATH }}
         run: |
           check() {
             for attempt in $(seq 1 12); do
@@ -275,6 +273,7 @@ jobs:
           }
           status=0
           check "https://$DBD_BOT_DOMAIN/health" || status=1
+          check "https://$DBD_BOT_DOMAIN/admin/$ADMIN_PATH/api/session" || status=1
           if [ -n "$HUES_DOMAIN" ]; then
             check "https://$HUES_DOMAIN/healthz" || status=1
           else

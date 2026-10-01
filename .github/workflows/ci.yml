@@ -52,6 +52,27 @@ jobs:
       - run: npm run test:coverage
       - run: npm run build
 
+  admin:
+    name: admin · lint, typecheck, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: apps/admin
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: apps/admin/.nvmrc
+          cache: npm
+          cache-dependency-path: apps/admin/package-lock.json
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test:coverage
+      - run: npm run build
+
   docker:
     name: ${{ matrix.app }} · image builds
     runs-on: ubuntu-latest
@@ -59,7 +80,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [dbd-bot, hues-and-cues]
+        app: [dbd-bot, hues-and-cues, admin]
     steps:
       - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v4
@@ -82,7 +103,7 @@ jobs:
         working-directory: infra
         run: |
           mkdir -p env
-          for f in caddy dbd-bot hues-and-cues; do touch "env/$f.env"; done
+          for f in caddy internal dbd-bot hues-and-cues admin; do touch "env/$f.env"; done
           docker compose config --quiet
       - name: Caddy config
         run: |

@@ -1,6 +1,6 @@
 name: Generate Invite Code (headless)
 
-# Prefer the dbd-bot admin page at https://YOUR_DOMAIN/admin/YOUR_ADMIN_PATH,
+# Prefer the stream-tools admin dashboard at https://YOUR_DOMAIN/admin/YOUR_ADMIN_PATH,
 # which is private by design. Use this workflow only when you can't reach the
 # web UI (e.g. during initial setup). The code is stored in the database and
 # masked in the log; read it back from the admin page or over SSH (below).

@@ -4,6 +4,7 @@ updates:
     directories:
       - /apps/dbd-bot
       - /apps/hues-and-cues
+      - /apps/admin
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
@@ -16,6 +17,7 @@ updates:
     directories:
       - /apps/dbd-bot
       - /apps/hues-and-cues
+      - /apps/admin
     schedule:
       interval: weekly
     open-pull-requests-limit: 5

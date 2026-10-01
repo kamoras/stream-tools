@@ -1,4 +1,12 @@
 # requires: DBD_BOT_DOMAIN
 {$DBD_BOT_DOMAIN} {
-	reverse_proxy dbd-bot:8080
+	# The shared admin dashboard (apps/admin) lives at the bot's old admin URL,
+	# /admin/<ADMIN_PATH>, so bookmarks and the Twitch OAuth redirect URL
+	# registered for the bot keep working.
+	handle /admin/* {
+		reverse_proxy admin:8080
+	}
+	handle {
+		reverse_proxy dbd-bot:8080
+	}
 }

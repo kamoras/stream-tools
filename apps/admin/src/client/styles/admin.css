@@ -1,0 +1,272 @@
+body {
+  min-height: 100vh;
+  background:
+    radial-gradient(1200px 600px at 10% -10%, rgb(139 123 255 / 0.12), transparent 60%),
+    radial-gradient(900px 500px at 110% 10%, rgb(255 95 109 / 0.08), transparent 60%), var(--bg);
+}
+
+.app {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 16px clamp(16px, 3vw, 32px) 48px;
+}
+
+.topbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0 20px;
+}
+
+.brand {
+  font-size: 1.25rem;
+  font-weight: 900;
+  background: var(--rainbow);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.app-section > h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0 12px;
+  font-size: 1.1rem;
+  letter-spacing: 0.02em;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px;
+  min-width: 0;
+}
+
+.card h3 {
+  margin: 0 0 10px;
+  font-size: 0.95rem;
+}
+
+.card--wide {
+  grid-column: 1 / -1;
+}
+
+.card--error {
+  border-color: var(--danger);
+}
+
+.muted {
+  color: var(--text-muted);
+}
+
+.hint {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.stats div {
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.stats dt {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.stats dd {
+  margin: 2px 0 0;
+  font-weight: 700;
+}
+
+.list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+}
+
+.list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.list li:last-child {
+  border-bottom: 0;
+}
+
+.list .actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.empty {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 0.75rem;
+  font-weight: 700;
+  vertical-align: middle;
+}
+
+.badge--ok {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+
+.badge--warn {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+
+.badge--bad {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+}
+
+input:not([type='checkbox']) {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  padding: 0.6em 0.8em;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+label {
+  display: block;
+  margin: 12px 0 6px;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.reveal {
+  margin: 12px 0 4px;
+  padding: 12px;
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  background: rgb(139 123 255 / 0.08);
+}
+
+.code {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  padding: 0.5em 0.8em;
+  border-radius: 8px;
+  background: var(--bg);
+  font-family: var(--font-mono);
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  user-select: all;
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.banner {
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+}
+
+.banner--ok {
+  border-color: var(--ok);
+}
+
+.banner--bad {
+  border-color: var(--danger);
+}
+
+.login {
+  max-width: 400px;
+  margin: 12vh auto 0;
+}
+
+.login .button {
+  width: 100%;
+  margin-top: 16px;
+}
+
+.form-error {
+  margin: 12px 0 0;
+  color: var(--danger);
+}
+
+.toasts {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 100;
+  max-width: min(420px, calc(100vw - 32px));
+}
+
+.toast {
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.4);
+}
+
+.toast--error {
+  border-color: var(--danger);
+}
+
+.stats + h3 {
+  margin-top: 18px;
+}

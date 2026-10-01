@@ -6,6 +6,7 @@
 
 - [ ] dbd-bot
 - [ ] hues-and-cues
+- [ ] admin (shared dashboard)
 - [ ] infra / CI (affects every app)
 
 ## Type of change
@@ -19,7 +20,7 @@
 ## Testing
 
 - [ ] dbd-bot: `npm test` and `npm run lint` pass
-- [ ] hues-and-cues: `npm run check` passes
+- [ ] hues-and-cues / admin: `npm run check` passes
 - [ ] Tested manually (describe how below if applicable)
 
 <!-- Describe any manual testing steps -->

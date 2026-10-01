@@ -14,7 +14,8 @@ set -Eeuo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly ROOT
 readonly APP_UID=1000 # the `node` user in both app images
-readonly ALL_APPS=(dbd-bot hues-and-cues)
+readonly ALL_APPS=(dbd-bot hues-and-cues admin)
+readonly DATA_APPS=(dbd-bot hues-and-cues) # apps with persistent data
 readonly HEALTH_TIMEOUT_SECONDS=180
 
 log() { printf '==> %s\n' "$*"; }
@@ -39,12 +40,25 @@ prepare_directories() {
   mkdir -p caddy/sites env
   chmod 700 env
   local app
-  for app in "${ALL_APPS[@]}"; do
+  for app in "${DATA_APPS[@]}"; do
     mkdir -p "data/$app"
     chown "$APP_UID:$APP_UID" "data/$app"
+  done
+  for app in "${ALL_APPS[@]}"; do
     [[ -f "env/$app.env" ]] || fail "Missing env/$app.env"
   done
   [[ -f env/caddy.env ]] || fail "Missing env/caddy.env"
+}
+
+# The admin dashboard authenticates to each app's internal API with a shared
+# token. It never leaves the server, so it is generated here once and kept.
+ensure_internal_token() {
+  if [[ ! -s env/internal.env ]]; then
+    local token
+    token="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+    (umask 077 && printf 'INTERNAL_API_TOKEN=%s\n' "$token" >env/internal.env)
+    log "Generated internal API token"
+  fi
 }
 
 env_value() { # env_value FILE NAME -> value of NAME in FILE, or empty
@@ -95,6 +109,7 @@ main() {
   local apps=("$@")
 
   prepare_directories
+  ensure_internal_token
   sync_caddy_sites
 
   local migrate=0

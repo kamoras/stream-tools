@@ -10,6 +10,7 @@ Twitch stream apps, hosted together on one Oracle Cloud Always Free VM.
 | --------------------------------------------- | ------------------------------------------------------------------------------------------------ | ----------------------------- |
 | [**dbd-bot**](apps/dbd-bot/README.md)         | Dead by Daylight chat bot: viewer queue, mod controls and DbD-themed commands, for many channels | Node.js, Express, tmi.js      |
 | [**hues-and-cues**](apps/hues-and-cues/README.md) | _Hues and Cues_-style colour-guessing game played by chat, with an OBS overlay and streamer accounts | TypeScript, Fastify, Vite |
+| [**admin**](apps/admin/README.md) | One dashboard and one login for every app: invite codes, channels, users, bot status, Twitch chat login | TypeScript, Fastify, Vite |
 
 ## Repository layout
 
@@ -17,6 +18,7 @@ Twitch stream apps, hosted together on one Oracle Cloud Always Free VM.
 apps/
   dbd-bot/          Each app is self-contained: its own package.json,
   hues-and-cues/    tests, Dockerfile and README.
+  admin/            Shared admin dashboard; talks to each app's internal API.
 infra/
   docker-compose.yml    Production stack: Caddy + every app
   caddy/Caddyfile       Imports one site file per app
@@ -25,8 +27,13 @@ infra/
 docs/DEPLOYMENT.md  VM setup, secrets, operations and troubleshooting
 ```
 
-Apps share nothing but the server and its Caddy reverse proxy. Each runs in its own container with
-its own data directory and configuration.
+Apps share nothing but the server, its Caddy reverse proxy and the admin dashboard. Each runs in its
+own container with its own data directory and configuration.
+
+**Administration** happens in one place: the [admin dashboard](apps/admin/README.md) at
+`https://<bot domain>/admin/<ADMIN_PATH>`, with a single login (`ADMIN_PASSWORD`). Apps have no admin
+pages of their own. Each exposes a small internal admin API on port 9000, which is reachable only
+on the server's private Docker network and protected by a shared token generated on the server.
 
 ## Local development
 
@@ -35,6 +42,7 @@ Work inside the app's directory; each has its own instructions:
 ```bash
 cd apps/dbd-bot && npm install && npm run dev
 cd apps/hues-and-cues && npm ci && npm run dev
+cd apps/admin && npm ci && npm run dev
 ```
 
 ## CI and deployment
@@ -55,9 +63,10 @@ needs.
 ### Adding an app
 
 1. Create `apps/<name>/` with a `Dockerfile` whose container listens on port 8080 and defines a
-   health check.
-2. Add a service named `<name>` to `infra/docker-compose.yml` with `env_file: env/<name>.env` and
-   `./data/<name>` for persistent data.
+   health check. If it needs administration, expose an internal admin API on port 9000 that
+   requires `INTERNAL_API_TOKEN`, and add a section for it to `apps/admin`.
+2. Add a service named `<name>` to `infra/docker-compose.yml` with
+   `env_file: [env/internal.env, env/<name>.env]` and `./data/<name>` for persistent data.
 3. Add `infra/sites-available/<name>.caddy` with a `# requires: <DOMAIN_VAR>` header.
 4. Add `<name>` to `ALL_APPS` in `infra/scripts/deploy.sh`, `KNOWN_APPS` and the path filters in
    `.github/workflows/deploy.yml`, the jobs in `ci.yml`, and `.github/dependabot.yml`.

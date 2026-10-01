@@ -9,16 +9,24 @@ to `main`.
                            │
             ┌──────────────▼───────────────┐
             │ caddy                        │  infra/caddy + infra/sites-available
-            │  DOMAIN ──────────► dbd-bot:8080
+            │  DOMAIN/admin/* ──► admin:8080 ───┐ Bearer INTERNAL_API_TOKEN
+            │  DOMAIN ──────────► dbd-bot:8080  ├──► dbd-bot:9000 (internal)
             │  HUES_DOMAIN ─────► hues-and-cues:8080
-            └──────────────────────────────┘
+            └──────────────────────────────┘    └──► hues-and-cues:9000 (internal)
                /opt/stream-tools on the VM
 ```
+
+The shared [admin dashboard](../apps/admin/README.md) is served at `https://<DOMAIN>/admin/<ADMIN_PATH>`,
+the bot's original admin URL. It manages every app through each app's internal admin API on port
+9000. Caddy never routes to that port, so it is reachable only on the private Docker network, and
+every call needs the shared token in `env/internal.env`. The token is generated on the server by the
+first deploy and kept from then on.
 
 | Path on the VM                     | Contents                                                               |
 | ---------------------------------- | ---------------------------------------------------------------------- |
 | `docker-compose.yml`, `caddy/`, `sites-available/`, `scripts/` | Copied from `infra/` on every deploy  |
 | `env/*.env`                        | Per-app configuration, written from GitHub secrets on every deploy     |
+| `env/internal.env`                 | Internal API token, generated once on the server; never in GitHub      |
 | `caddy/sites/`                     | Sites currently published (managed by `deploy.sh`)                     |
 | `data/dbd-bot/`                    | Bot database (`bot.db`)                                                |
 | `data/hues-and-cues/`              | Hues & Cues database (`hues.db`)                                       |
@@ -114,6 +122,16 @@ Under **Settings → Secrets and variables → Actions**, add:
 | `ORACLE_USER`    |    ✅    | SSH username (`ubuntu`)                                        |
 | `ORACLE_SSH_KEY` |    ✅    | The **private** deploy key from step 2                         |
 
+**Admin dashboard** (one login for every app)
+
+| Secret           | Required | Description                                                            |
+| ---------------- | :------: | ---------------------------------------------------------------------- |
+| `ADMIN_PASSWORD` |    ✅    | The admin password                                                     |
+| `ADMIN_PATH`     |    ✅    | Secret URL segment, e.g. output of `openssl rand -hex 12`             |
+
+These are the bot's original admin secrets, so an existing setup needs no changes. The dashboard
+is at `https://<DOMAIN>/admin/<ADMIN_PATH>`.
+
 **dbd-bot**: see [apps/dbd-bot/README.md](../apps/dbd-bot/README.md#deployment). `DOMAIN` is the
 bot's hostname.
 
@@ -122,14 +140,11 @@ bot's hostname.
 | Secret                      | Required | Description                                                              |
 | --------------------------- | :------: | ------------------------------------------------------------------------ |
 | `HUES_DOMAIN`               |    ✅¹   | The game's hostname, e.g. `hues.yourdomain.com`                          |
-| `HUES_ADMIN_PASSWORD`       |    ✅²   | Password for the admin page (12+ characters)                             |
-| `HUES_ADMIN_PATH`           |    ✅²   | Secret URL segment, e.g. output of `openssl rand -hex 12`               |
 | `HUES_ALLOWED_CHANNELS`     |          | Comma-separated Twitch channels that may run games                       |
 
 ¹ Without it the game still runs, but is not published.
-² Sign-up is invite-only, and invite codes are generated on the admin page at
-`https://<HUES_DOMAIN>/admin/<HUES_ADMIN_PATH>`, just like the bot's. Without these two secrets
-nobody can create an account. Set both or neither; the deploy fails early if only one is set.
+
+Hues & Cues sign-up is invite-only. Generate codes in the admin dashboard's **Hues & Cues** section.
 
 ### 5. Deploy
 

@@ -32,7 +32,7 @@ This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.
 
 2. **Work in the app you're changing.** Every command below runs from that app's directory:
    ```bash
-   cd apps/dbd-bot          # or apps/hues-and-cues
+   cd apps/dbd-bot          # or apps/hues-and-cues, apps/admin
    npm install
    cp .env.example .env     # see the app's README for required values
    ```
@@ -46,8 +46,8 @@ This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.
 
 ## Development Workflow
 
-The examples below are for `apps/dbd-bot`. For `apps/hues-and-cues`, see its
-[README](apps/hues-and-cues/README.md#development) (`npm run dev`, `npm run check`).
+The examples below are for `apps/dbd-bot`. For `apps/hues-and-cues` and `apps/admin`, see their
+READMEs (`npm run dev`, `npm run check`).
 
 Start the bot with auto-reload:
 ```bash
@@ -101,7 +101,7 @@ Common prefixes: `feat`, `fix`, `chore`, `docs`, `test`, `refactor`.
 
 ## Pull Request Process
 
-1. Make sure the changed app's checks pass locally (`npm test` and `npm run lint` for dbd-bot; `npm run check` for hues-and-cues).
+1. Make sure the changed app's checks pass locally (`npm test` and `npm run lint` for dbd-bot; `npm run check` for hues-and-cues and admin).
 2. Open a PR against `main` using the provided template.
 3. Keep PRs focused — one feature or fix per PR, and ideally one app per PR.
 4. Changes under `infra/` affect every app on the server; describe how you tested them.
