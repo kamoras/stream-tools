@@ -73,8 +73,10 @@ needs.
    (plus `env/internal-<name>.env` if it has an internal API) and `./data/<name>` for persistent
    data.
 3. Add `infra/sites-available/<name>.caddy` with a `# requires: <DOMAIN_VAR>` header.
-4. Add `<name>` to `ALL_APPS` in `infra/scripts/deploy.sh`, `KNOWN_APPS` and the path filters in
-   `.github/workflows/deploy.yml`, the jobs in `ci.yml`, and `.github/dependabot.yml`.
+4. Add `<name>` to `ALL_APPS` in `infra/scripts/deploy.sh` (and to `DATA_APPS` if it keeps data,
+   so `data/<name>` is created and owned by uid 1000), `KNOWN_APPS` and the path filters in
+   `.github/workflows/deploy.yml`, `.github/dependabot.yml`, and `ci.yml`: a job for the app, plus
+   its `env/<name>.env` (and `env/internal-<name>.env`) in the env files the `infra` job creates.
 5. Write `env/<name>.env` and the domain variable in the **Write configuration** step of `deploy.yml`.
 
 ## Contributing
