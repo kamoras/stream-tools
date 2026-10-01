@@ -1,9 +1,11 @@
 # requires: DBD_BOT_DOMAIN
 {$DBD_BOT_DOMAIN} {
-	# The shared admin dashboard (apps/admin) lives at the bot's old admin URL,
-	# /admin/<ADMIN_PATH>, so bookmarks and the Twitch OAuth redirect URL
-	# registered for the bot keep working.
+	# The shared admin dashboard (apps/admin) is served at the bot's old admin
+	# URL, /admin/<ADMIN_PATH>, unless it has a domain of its own (ADMIN_DOMAIN);
+	# then old links are redirected there.
 	handle /admin/* {
+		@moved `{env.ADMIN_DOMAIN} != ""`
+		redir @moved https://{env.ADMIN_DOMAIN}{uri} 308
 		reverse_proxy admin:8080
 	}
 	handle {

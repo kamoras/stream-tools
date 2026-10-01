@@ -112,6 +112,7 @@ jobs:
           cp infra/sites-available/*.caddy /tmp/caddy/sites/
           docker run --rm -v /tmp/caddy:/etc/caddy:ro \
             -e DBD_BOT_DOMAIN=bot.example.com -e HUES_DOMAIN=hues.example.com \
+            -e ADMIN_DOMAIN=admin.example.com \
             caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 
   # One check that passes only when every job above passes. It keeps the

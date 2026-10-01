@@ -7,13 +7,16 @@ One dashboard and one login for every app in [stream-tools](../../README.md).
 | Dead by Daylight bot | Bot status and uptime, **Connect via Twitch** for the chat login, single-use invite codes, connected channels with Join/Leave/Disconnect, webhook activity |
 | Hues & Cues          | Single-use invite codes (with notes, expiry and revoke), every account with last sign-in and channels                                                      |
 
-It lives at the bot's admin URL, `https://<DOMAIN>/admin/<ADMIN_PATH>`, so existing bookmarks and the
-Twitch OAuth redirect URL keep working. Any other `/admin/*` URL returns 404.
+It lives at `https://<ADMIN_DOMAIN>/admin/<ADMIN_PATH>` when the optional `ADMIN_DOMAIN` secret is
+set (the old URL on the bot's domain then redirects there), and otherwise at the bot's admin URL,
+`https://<DOMAIN>/admin/<ADMIN_PATH>`. Old bookmarks keep working either way; with `ADMIN_DOMAIN`,
+add the new Twitch OAuth redirect URL as described in
+[docs/DEPLOYMENT.md](../../docs/DEPLOYMENT.md). Any other `/admin/*` URL returns 404.
 
 ## How it works
 
 ```
-browser ──HTTPS──► Caddy ── /admin/* on DOMAIN ──► admin:8080
+browser ──HTTPS──► Caddy ── /admin/* on ADMIN_DOMAIN ──► admin:8080
                                                      │  Bearer <that app's token>
                                      ┌───────────────┴───────────────┐
                                      ▼                               ▼
@@ -49,7 +52,7 @@ browser ──HTTPS──► Caddy ── /admin/* on DOMAIN ──► admin:808
 | `TRUST_PROXY`       | `false`                     | Set behind Caddy (compose does this)                                |
 | `COOKIE_SECURE`     | on in production            | `Secure` cookies                                                    |
 
-In production these come from the existing `ADMIN_PASSWORD`, `ADMIN_PATH` and `DOMAIN` secrets; see
+In production these come from the `ADMIN_PASSWORD`, `ADMIN_PATH` and `ADMIN_DOMAIN` (or `DOMAIN`) secrets; see
 [docs/DEPLOYMENT.md](../../docs/DEPLOYMENT.md).
 
 ## Development

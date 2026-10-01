@@ -9,15 +9,16 @@ to `main`.
                            │
             ┌──────────────▼───────────────┐
             │ caddy                        │  infra/caddy + infra/sites-available
-            │  DOMAIN/admin/* ──► admin:8080 ───┐ Bearer <per-app token>
+            │  ADMIN_DOMAIN ────► admin:8080 ───┐ Bearer <per-app token>
             │  DOMAIN ──────────► dbd-bot:8080  ├──► dbd-bot:9000 (internal)
             │  HUES_DOMAIN ─────► hues-and-cues:8080
             └──────────────────────────────┘    └──► hues-and-cues:9000 (internal)
                /opt/stream-tools on the VM
 ```
 
-The shared [admin dashboard](../apps/admin/README.md) is served at `https://<DOMAIN>/admin/<ADMIN_PATH>`,
-the bot's original admin URL. It manages every app through each app's internal admin API on port
+The shared [admin dashboard](../apps/admin/README.md) is served at
+`https://<ADMIN_DOMAIN>/admin/<ADMIN_PATH>`. Without `ADMIN_DOMAIN` it stays at the bot's original
+admin URL, `https://<DOMAIN>/admin/<ADMIN_PATH>`; with it, that old URL redirects to the new one. It manages every app through each app's internal admin API on port
 9000. Caddy never routes to that port, so it is reachable only on the private Docker network, and
 every call needs that app's own token from `env/internal-<app>.env`, so a compromised app can't use
 another app's API. The tokens are generated on the server by the first deploy and kept from then
@@ -137,10 +138,23 @@ Under **Settings → Secrets and variables → Actions**, add:
 | ---------------- | :------: | ---------------------------------------------------------------------- |
 | `ADMIN_PASSWORD` |    ✅    | The admin password                                                     |
 | `ADMIN_PATH`     |    ✅    | Secret URL segment of letters, numbers, `_` or `-`, e.g. output of `openssl rand -hex 12` |
+| `ADMIN_DOMAIN`   |          | The dashboard's own hostname, e.g. `stream-tools.yourdomain.com`        |
 
-These are the bot's original admin secrets, so an existing setup needs no changes, unless
-`ADMIN_PATH` contains other characters: the deploy then stops with an error asking you to change
-it. The dashboard is at `https://<DOMAIN>/admin/<ADMIN_PATH>`.
+`ADMIN_PASSWORD` and `ADMIN_PATH` are the bot's original admin secrets, so an existing setup needs no
+changes, unless `ADMIN_PATH` contains other characters: the deploy then stops with an error asking
+you to change it.
+
+Without `ADMIN_DOMAIN` the dashboard is at `https://<DOMAIN>/admin/<ADMIN_PATH>`. To give it a
+domain of its own:
+
+1. Point an A record for the new hostname at the VM (DNS only, if you use Cloudflare).
+2. In the [Twitch developer console](https://dev.twitch.tv/console/apps), add
+   `https://<ADMIN_DOMAIN>/admin/<ADMIN_PATH>/twitch-callback` to the app's OAuth redirect URLs
+   (keep the old one until the deploy has finished).
+3. Add the `ADMIN_DOMAIN` secret and deploy (**Actions → Deploy → Run workflow** with `none`).
+
+The dashboard then lives at `https://<ADMIN_DOMAIN>/admin/<ADMIN_PATH>`; the old URL on the bot's
+domain redirects there, and the root of the new domain shows nothing (404).
 
 **dbd-bot**: see [apps/dbd-bot/README.md](../apps/dbd-bot/README.md#deployment). `DOMAIN` is the
 bot's hostname.
