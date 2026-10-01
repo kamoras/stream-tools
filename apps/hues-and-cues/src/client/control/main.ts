@@ -770,7 +770,10 @@ function clueForm(
     counter.textContent =
       violation ?? `${String(words)} / ${String(limit)} word${limit === 1 ? '' : 's'}`;
     counter.classList.toggle('hint--error', violation !== null);
-    submit.disabled = words === 0 || violation !== null;
+    // Without the rules the server accepts anything non-blank (even just an emoji).
+    submit.disabled = state.settings.enforceCueRules
+      ? words === 0 || violation !== null
+      : input.value.trim() === '';
   };
   input.addEventListener('input', validate);
   validate();

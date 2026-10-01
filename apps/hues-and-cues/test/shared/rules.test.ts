@@ -21,6 +21,10 @@ describe('cueRuleViolation', () => {
     for (const cue of ['plan b', 'vitamin c', 'k-pop', 'd-day', 'blu-ray']) {
       expect(cueRuleViolation(cue, 2, none)).toBeNull();
     }
+    // Numbers outside the board's 1–30 columns, and directions in ordinary phrases.
+    for (const cue of ['1984', '007', '404', 'top gun', 'east end']) {
+      expect(cueRuleViolation(cue, 2, none)).toBeNull();
+    }
     // Punctuation and emoji don't count as words.
     expect(cueRuleViolation('🌊 ocean!', 1, none)).toBeNull();
   });
@@ -67,6 +71,17 @@ describe('cueRuleViolation', () => {
 
   it('needs at least one word', () => {
     expect(cueRuleViolation('!!!', 1, new Set(['']))).toMatch(/at least one word/u);
+  });
+
+  it('refuses second cues that only steer, in any words', () => {
+    for (const cue of ['top left', 'far left', 'bottom right', 'north east']) {
+      expect(cueRuleViolation(cue, 2, none)).toMatch(/first guesses/u);
+    }
+  });
+
+  it('folds full-width and decomposed characters', () => {
+    expect(cueRuleViolation('ＢＬＵＥ', 1, none)).toMatch(/Basic colour names/u);
+    expect(cueRuleViolation('cafe\u0301', 1, new Set(['café']))).toMatch(/already given/u);
   });
 
   it('sees colour names in possessives', () => {

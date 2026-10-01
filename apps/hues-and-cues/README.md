@@ -61,13 +61,13 @@ The official cue rules, enforced by default ("Enforce official cue rules"):
   yellow, nor simple variants such as "reddish", "bluish" or "greener". Specific names such as
   "lavender" or "teal" are fine.
 - No references to the board's letters or numbers: a position such as "F12", or a cue made only of
-  letters and numbers ("12", "twelve", "F"). Ordinary phrases such as "cloud nine" or "plan B" are
-  fine.
+  letters and board numbers ("12", "twelve", "F"). Ordinary phrases such as "cloud nine" or "plan B",
+  and numbers that aren't on the board such as "1984", are fine.
 - No repeating a cue already given this game. Reusing a word is fine: "ocean" then "deep ocean"
   is allowed.
 - The second cue can't compare against the first guesses: no comparatives such as "lighter",
-  "darker" or "paler", and no cue that only steers, such as "more", "up" or "down left". Phrases
-  like "left bank" are fine.
+  "darker" or "paler", and no cue that only steers, such as "more", "up", "top left" or
+  "north east". Phrases like "left bank" are fine.
 
 The rules also forbid comparing the colour to objects in the room. That can't be checked
 automatically, so it's up to you.

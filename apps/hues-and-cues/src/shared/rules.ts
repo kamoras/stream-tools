@@ -87,6 +87,19 @@ const STEERING_WORDS: ReadonlySet<string> = new Set([
   'much',
   'way',
   'too',
+  'top',
+  'bottom',
+  'upper',
+  'far',
+  'side',
+  'middle',
+  'centre',
+  'center',
+  'corner',
+  'north',
+  'south',
+  'east',
+  'west',
 ]);
 
 /**
@@ -140,17 +153,28 @@ const FORBIDDEN_COLOUR_PATTERN = new RegExp(
 const POSITION_PATTERN = /^(?:[a-p]\d{1,2}|\d{1,2}[a-p])$/u;
 /** A row letter on its own. Refused only when the whole cue is letters and numbers ("f", "f 12"). */
 const ROW_LETTER_PATTERN = /^[a-p]$/u;
-/** A number in digits, including ordinals such as 12th. */
-const DIGITS_PATTERN = /^\d+(?:st|nd|rd|th)?$/u;
+/** One or two digits, optionally an ordinal such as 12th ("007" is a name, not a column). */
+const DIGITS_PATTERN = /^(\d{1,2})(?:st|nd|rd|th)?$/u;
+
+/** A board column (1–30) in digits, so "1984" or "007" are fine. */
+function isColumnNumber(word: string): boolean {
+  const digits = DIGITS_PATTERN.exec(word)?.[1];
+  if (digits === undefined) return false;
+  const value = Number(digits);
+  return value >= 1 && value <= 30;
+}
 
 function isPositionWord(word: string): boolean {
-  return DIGITS_PATTERN.test(word) || NUMBER_WORDS.has(word) || ROW_LETTER_PATTERN.test(word);
+  return isColumnNumber(word) || NUMBER_WORDS.has(word) || ROW_LETTER_PATTERN.test(word);
 }
 
 /** Lower-case words of a cue, without punctuation around them or a possessive "'s". */
 export function cueWords(text: string): string[] {
-  return splitWords(text.toLowerCase())
-    .map((word) => word.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '').replace(/['’]s$/u, ''))
+  // NFKC folds look-alikes such as full-width "ＢＬＵＥ" and composes accents.
+  return splitWords(text.normalize('NFKC').toLowerCase())
+    .map((word) =>
+      word.replace(/^[^\p{L}\p{M}\p{N}]+|[^\p{L}\p{M}\p{N}]+$/gu, '').replace(/['’]s$/u, ''),
+    )
     .filter((word) => word !== '');
 }
 
