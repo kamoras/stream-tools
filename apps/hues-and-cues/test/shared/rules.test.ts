@@ -17,6 +17,12 @@ describe('cueRuleViolation', () => {
     for (const cue of ['left bank', 'down under', 'right whale', 'more moss']) {
       expect(cueRuleViolation(cue, 2, none)).toBeNull();
     }
+    // Single letters in ordinary words, and shortened colour stems on their own.
+    for (const cue of ['plan b', 'vitamin c', 'k-pop', 'd-day', 'blu-ray']) {
+      expect(cueRuleViolation(cue, 2, none)).toBeNull();
+    }
+    // Punctuation and emoji don't count as words.
+    expect(cueRuleViolation('🌊 ocean!', 1, none)).toBeNull();
   });
 
   it('limits cue 1 to one word and cue 2 to two', () => {
@@ -46,17 +52,7 @@ describe('cueRuleViolation', () => {
   });
 
   it("forbids the board's letters and numbers", () => {
-    for (const cue of [
-      'F12',
-      '12F',
-      '7',
-      '12th',
-      'f',
-      'row f',
-      'twelve',
-      'twelfth',
-      'twenty-one',
-    ]) {
+    for (const cue of ['F12', '12F', '7', '12th', 'f', 'f 12', 'twelve', 'twelfth', 'twenty-one']) {
       expect(cueRuleViolation(cue, 2, none)).toMatch(/letters or numbers/u);
     }
   });
@@ -71,6 +67,11 @@ describe('cueRuleViolation', () => {
 
   it('needs at least one word', () => {
     expect(cueRuleViolation('!!!', 1, new Set(['']))).toMatch(/at least one word/u);
+  });
+
+  it('sees colour names in possessives', () => {
+    expect(cueRuleViolation("snow white's", 2, none)).toMatch(/Basic colour names/u);
+    expect(cueRuleViolation('grey’s anatomy', 2, none)).toMatch(/Basic colour names/u);
   });
 
   it('treats hyphens, underscores and slashes as word breaks', () => {

@@ -23,8 +23,9 @@ function splitWords(text: string): string[] {
   return text.split(/[\s\-_/]+/u).filter((word) => word !== '');
 }
 
+/** Words in a cue, ignoring punctuation and emoji (see {@link cueWords}). */
 export function countWords(text: string): number {
-  return splitWords(text.trim()).length;
+  return cueWords(text).length;
 }
 
 /**
@@ -123,24 +124,33 @@ const NUMBER_WORDS: ReadonlySet<string> = (() => {
 const COLOUR_STEMS = FORBIDDEN_COLOUR_WORDS.flatMap((word) =>
   word.endsWith('e') ? [word, word.slice(0, -1)] : [word],
 );
-/** A colour name or a simple variant: reds, reddish, bluish, purply, greener, bluest. */
+const COLOUR_SUFFIXES = 's|es|ish|dish|nish|y|dy|ness|er|der|ner|est|dest|nest';
+/**
+ * A colour name or a simple variant: reds, reddish, bluish, purply, greener,
+ * bluest. A shortened stem ("blu") only counts with a suffix, so "blu-ray"
+ * is fine.
+ */
 const FORBIDDEN_COLOUR_PATTERN = new RegExp(
-  `^(?:${COLOUR_STEMS.join('|')})(?:s|es|ish|dish|nish|y|dy|ness|er|der|ner|est|dest|nest)?$`,
+  `^(?:(?:${FORBIDDEN_COLOUR_WORDS.join('|')})(?:${COLOUR_SUFFIXES})?|(?:${COLOUR_STEMS.filter(
+    (stem) => !FORBIDDEN_COLOUR_WORDS.includes(stem),
+  ).join('|')})(?:${COLOUR_SUFFIXES}))$`,
   'u',
 );
-/** A board position such as F12 or 12F, or a lone row letter (except the words "a" and "i"). */
-const POSITION_PATTERN = /^(?:[a-p]\d{1,2}|\d{1,2}[a-p]|[b-hj-p])$/u;
+/** A board position such as F12 or 12F. */
+const POSITION_PATTERN = /^(?:[a-p]\d{1,2}|\d{1,2}[a-p])$/u;
+/** A row letter on its own. Refused only when the whole cue is letters and numbers ("f", "f 12"). */
+const ROW_LETTER_PATTERN = /^[a-p]$/u;
 /** A number in digits, including ordinals such as 12th. */
 const DIGITS_PATTERN = /^\d+(?:st|nd|rd|th)?$/u;
 
-function isNumberWord(word: string): boolean {
-  return DIGITS_PATTERN.test(word) || NUMBER_WORDS.has(word);
+function isPositionWord(word: string): boolean {
+  return DIGITS_PATTERN.test(word) || NUMBER_WORDS.has(word) || ROW_LETTER_PATTERN.test(word);
 }
 
-/** Lower-case words of a cue, without punctuation around or between them. */
+/** Lower-case words of a cue, without punctuation around them or a possessive "'s". */
 export function cueWords(text: string): string[] {
   return splitWords(text.toLowerCase())
-    .map((word) => word.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, ''))
+    .map((word) => word.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '').replace(/['’]s$/u, ''))
     .filter((word) => word !== '');
 }
 
@@ -157,7 +167,7 @@ export function normalizeCue(text: string): string {
  * - Cue 1 is one word; cue 2 is one or two words.
  * - No basic colour names (see {@link FORBIDDEN_COLOUR_WORDS}).
  * - No references to the board's letters or numbers (a position such as F12,
- *   a lone row letter, or a cue that is just a number).
+ *   or a cue made only of row letters and numbers, such as "twelve" or "f").
  * - No repeating a cue already given this game.
  * - Cue 2 may not compare against the first guesses (see {@link RELATIVE_CUE_WORDS})
  *   or consist only of steering words such as "more" or "down left".
@@ -175,7 +185,7 @@ export function cueRuleViolation(
   if (words.length === 0) {
     return 'The cue needs at least one word.';
   }
-  if (countWords(text) > limit) {
+  if (words.length > limit) {
     return `Cue ${String(clueNumber)} may be at most ${String(limit)} word${limit === 1 ? '' : 's'}.`;
   }
   for (const word of words) {
@@ -189,7 +199,7 @@ export function cueRuleViolation(
       return `The second cue can't compare against the first guesses (like "${word}").`;
     }
   }
-  if (words.every(isNumberWord)) {
+  if (words.every(isPositionWord)) {
     return "Cues can't refer to the board's letters or numbers.";
   }
   if (clueNumber === 2 && words.every((word) => STEERING_WORDS.has(word))) {
