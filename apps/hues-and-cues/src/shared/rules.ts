@@ -254,7 +254,8 @@ export function cueRuleViolation(
       return `The second cue can't compare against the first guesses (like "${word}").`;
     }
   }
-  if (words.every(isPositionWord)) {
+  // Judged on whole words, so "I'm" isn't read as the row letters I and M.
+  if (countedWords(text).every((word) => isPositionWord(word.replace(/['’]/gu, '')))) {
     return "Cues can't refer to the board's letters or numbers.";
   }
   if (clueNumber === 2 && words.every((word) => STEERING_WORDS.has(word))) {

@@ -127,7 +127,7 @@ describe('cueRuleViolation', () => {
     expect(cueRuleViolation("ocean''s", 1, new Set(['ocean']))).toMatch(/already given/u);
     expect(cueRuleViolation('\u2764\ufe0f', 1, none)).toMatch(/at least one word/u);
     // Apostrophes still keep ordinary words whole for the word limit.
-    for (const cue of ["o'clock", "rock'n'roll", "don't"]) {
+    for (const cue of ["o'clock", "rock'n'roll", "don't", "I'm", "I'd"]) {
       expect(cueRuleViolation(cue, 1, none)).toBeNull();
     }
   });

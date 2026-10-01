@@ -227,7 +227,14 @@ export class GameEngine {
         Object.assign(next, { [key]: value });
       }
     }
+    const durationChanged = next.guessDurationSeconds !== this.settings.guessDurationSeconds;
     this.settings = next;
+    // A new timer applies at once: restart it (or stop it for "close manually")
+    // so the overlay's countdown and the server's deadline stay in step.
+    if (durationChanged && this.phase === 'guessing' && this.round) {
+      this.round.deadline =
+        next.guessDurationSeconds > 0 ? this.now() + next.guessDurationSeconds * 1000 : null;
+    }
   }
 
   /** Closes guessing if its deadline has passed. Returns whether anything changed. */

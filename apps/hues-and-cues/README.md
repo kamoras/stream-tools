@@ -111,14 +111,14 @@ earn one point for every guess inside the scoring frame. With one guess per squa
 
 ### Settings (control panel)
 
-| Setting                         | Default | Description                                                   |
-| ------------------------------- | ------- | ------------------------------------------------------------- |
-| Guess timer                     | 45 s    | `0` means guessing stays open until you close it              |
-| Second clue                     | on      | Adds the two-word cue and second guess                        |
-| Let chatters change their guess | off     | Latest guess counts while guessing is open (not official)     |
-| Require `!guess`                | off     | Ignore bare `F12` messages; only `!guess F12` counts          |
-| One guess per square            | on      | Official rule; turn off for very large chats                  |
-| Enforce official cue rules      | on      | Word limits, no basic colours, no board positions, no repeats |
+| Setting                         | Default | Description                                                                 |
+| ------------------------------- | ------- | --------------------------------------------------------------------------- |
+| Guess timer                     | 45 s    | `0` keeps guessing open until you close it; a change restarts the countdown |
+| Second clue                     | on      | Adds the two-word cue and second guess                                      |
+| Let chatters change their guess | off     | Latest guess counts while guessing is open (not official)                   |
+| Require `!guess`                | off     | Ignore bare `F12` messages; only `!guess F12` counts                        |
+| One guess per square            | on      | Official rule; turn off for very large chats                                |
+| Enforce official cue rules      | on      | Word limits, no basic colours, no board positions, no repeats               |
 
 Accepted chat formats: `F12`, `f12`, `F 12`, `F-12`, `12F`, `!guess F12`, `!g F12`, `!hue F12`.
 

@@ -7,6 +7,11 @@ describe('parseChatGuess', () => {
     expect(parseChatGuess('12f', false)).toEqual({ row: 5, col: 11 });
   });
 
+  it('ignores the invisible characters chat clients add to repeat a message', () => {
+    expect(parseChatGuess('F12 \u{E0000}', false)).toEqual({ row: 5, col: 11 });
+    expect(parseChatGuess('!guess F12 \u034f', false)).toEqual({ row: 5, col: 11 });
+  });
+
   it('accepts commands', () => {
     expect(parseChatGuess('!guess F12', false)).toEqual({ row: 5, col: 11 });
     expect(parseChatGuess('!G a1', true)).toEqual({ row: 0, col: 0 });

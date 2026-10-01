@@ -233,6 +233,18 @@ describe('GameEngine', () => {
       expect(engine.deadline).toBeNull();
     });
 
+    it('applies a changed timer to the open guessing window at once', () => {
+      startRound();
+      engine.giveClue('ocean');
+      clock.advance(20_000);
+      engine.updateSettings({ guessDurationSeconds: 10 });
+      expect(engine.deadline).toBe(clock.now() + 10_000);
+      engine.updateSettings({ guessDurationSeconds: 0 });
+      expect(engine.deadline).toBeNull();
+      engine.updateSettings({ useSecondClue: false });
+      expect(engine.deadline).toBeNull();
+    });
+
     it('has no deadline in manual mode', () => {
       engine.updateSettings({ guessDurationSeconds: 0 });
       startRound();
