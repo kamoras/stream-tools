@@ -89,6 +89,17 @@ describe('cueRuleViolation', () => {
     expect(cueRuleViolation('grey’s anatomy', 2, none)).toMatch(/Basic colour names/u);
   });
 
+  it('splits words on any punctuation and ignores invisible characters', () => {
+    for (const cue of ['red,green', 'sky—blue', 'sky–blue', 'blue&gold', 're\u00addish']) {
+      expect(cueRuleViolation(cue, 2, none)).toMatch(/Basic colour names/u);
+    }
+    expect(cueRuleViolation('f.12', 2, none)).toMatch(/letters or numbers/u);
+    expect(cueRuleViolation('f\u200b12', 1, none)).toMatch(/letters or numbers/u);
+    expect(cueRuleViolation('even,lighter', 2, none)).toMatch(/first guesses/u);
+    expect(cueRuleViolation('red,green', 1, none)).toMatch(/at most 1 word/u);
+    expect(cueRuleViolation("don't", 1, none)).toBeNull();
+  });
+
   it('treats hyphens, underscores and slashes as word breaks', () => {
     expect(cueRuleViolation('deep-sea', 1, none)).toMatch(/at most 1 word/u);
     expect(cueRuleViolation('sky-blue', 2, none)).toMatch(/Basic colour names/u);

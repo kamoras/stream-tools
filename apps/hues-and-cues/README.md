@@ -55,8 +55,8 @@ players.
 
 The official cue rules, enforced by default ("Enforce official cue rules"):
 
-- The first cue is one word; the second is one or two words. Hyphens count as word breaks, so
-  "deep-sea" is two words.
+- The first cue is one word; the second is one or two words. Punctuation such as hyphens, dashes
+  or commas separates words, so "deep-sea" is two words.
 - No basic colour names: black, blue, brown, grey/gray, green, orange, pink, purple, red, white or
   yellow, nor simple variants such as "reddish", "bluish" or "greener". Specific names such as
   "lavender" or "teal" are fine.

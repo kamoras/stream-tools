@@ -18,9 +18,17 @@ export function pointsForGuess(guess: Coord, target: Coord): number {
   return GUESS_POINTS_BY_DISTANCE[chebyshevDistance(guess, target)] ?? 0;
 }
 
-/** Splits a cue into words. Hyphens, underscores and slashes separate words too. */
+/**
+ * Splits a cue into words. Anything that isn't a letter, accent, digit or
+ * apostrophe separates words (spaces, any dash, commas, dots, "+", "&"), so
+ * "sky—blue" or "red,green" can't pass as one word. Invisible formatting
+ * characters (zero-width spaces, soft hyphens) are removed first.
+ */
 function splitWords(text: string): string[] {
-  return text.split(/[\s\-_/]+/u).filter((word) => word !== '');
+  return text
+    .replace(/\p{Cf}/gu, '')
+    .split(/[^\p{L}\p{M}\p{N}'’]+/u)
+    .filter((word) => word !== '');
 }
 
 /** Words in a cue, ignoring punctuation and emoji (see {@link cueWords}). */
