@@ -132,6 +132,12 @@ describe('cueRuleViolation', () => {
     }
   });
 
+  it('keeps the marks that are part of words in other scripts', () => {
+    expect(cueRuleViolation('カラス', 1, new Set([normalizeCue('ガラス')]))).toBeNull();
+    expect(cueRuleViolation('नल', 1, new Set([normalizeCue('नीला')]))).toBeNull();
+    expect(cueRuleViolation('नीला', 1, new Set([normalizeCue('नीला')]))).toMatch(/already given/u);
+  });
+
   it('treats hyphens, underscores and slashes as word breaks', () => {
     expect(cueRuleViolation('deep-sea', 1, none)).toMatch(/at most 1 word/u);
     expect(cueRuleViolation('sky-blue', 2, none)).toMatch(/Basic colour names/u);

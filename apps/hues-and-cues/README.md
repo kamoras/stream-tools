@@ -69,8 +69,10 @@ The official cue rules, enforced by default ("Enforce official cue rules"):
   "darker" or "paler", and no cue that only steers, such as "more", "up", "top left" or
   "north east". Phrases like "left bank" are fine.
 
-Cues are checked with accents, look-alike characters and invisible characters folded away, so
-"réd" or a full-width "ＲＥＤ" is treated as "red".
+Cues are checked with accents (on Latin letters), styled or full-width letters and invisible
+characters folded away, so "réd" or "ＲＥＤ" is treated as "red". The checks help you keep to the
+rules; they aren't meant to stop someone determined to get round them, such as by swapping in a
+Cyrillic letter that looks Latin.
 
 The rules also forbid comparing the colour to objects in the room. That can't be checked
 automatically, so it's up to you.

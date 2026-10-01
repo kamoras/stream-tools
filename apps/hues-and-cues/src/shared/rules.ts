@@ -19,20 +19,24 @@ export function pointsForGuess(guess: Coord, target: Coord): number {
 }
 
 /**
- * The cue in the form it is checked in, so look-alikes can't sneak past:
- * compatibility forms folded (full-width "ＢＬＵＥ", keycap "1️⃣"), accents
- * removed ("réd" is "red"), invisible characters removed (zero-width spaces,
- * soft hyphens, variation selectors, fillers) and lower-cased.
+ * The cue in the form it is checked in: compatibility forms folded
+ * (full-width "ＢＬＵＥ", circled or styled letters, keycap "1️⃣"), invisible
+ * characters removed (zero-width spaces, soft hyphens, variation selectors,
+ * fillers), accents removed from Latin, Greek and Cyrillic letters and digits
+ * ("réd" is "red") and lower-cased. Other scripts keep their marks, which
+ * are part of the word there (Japanese "ガラス" is not "カラス").
  */
 function checkForm(text: string): string {
   return text
     .normalize('NFKD')
-    .replace(/[\p{M}\p{Default_Ignorable_Code_Point}]/gu, '')
+    .replace(/\p{Default_Ignorable_Code_Point}/gu, '')
+    .replace(/([\p{Script=Latin}\p{Script=Greek}\p{Script=Cyrillic}\p{N}])\p{M}+/gu, '$1')
+    .normalize('NFC')
     .toLowerCase();
 }
 
-/** Characters that separate words: anything but letters, digits and apostrophes. */
-const WORD_SEPARATOR = /[^\p{L}\p{N}'’]+/u;
+/** Characters that separate words: anything but letters, marks, digits and apostrophes. */
+const WORD_SEPARATOR = /[^\p{L}\p{M}\p{N}'’]+/u;
 
 /**
  * Words as the streamer would count them: punctuation, dashes and emoji
@@ -196,8 +200,8 @@ function isPositionWord(word: string): boolean {
 export function cueWords(text: string): string[] {
   return checkForm(text)
     .replace(/['’]+s(?![\p{L}\p{N}])/gu, '')
-    .split(/[^\p{L}\p{N}]+/u)
-    .filter((word) => word !== '');
+    .split(/[^\p{L}\p{M}\p{N}]+/u)
+    .filter((word) => /[\p{L}\p{N}]/u.test(word));
 }
 
 /** The form cues are compared in when checking for repeats. */
