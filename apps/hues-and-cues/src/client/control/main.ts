@@ -14,7 +14,12 @@ import type {
   HostGameState,
   RoomSummary,
 } from '../../shared/protocol.js';
-import { CLUE_WORD_LIMITS, countWords, MAX_CLUE_LENGTH } from '../../shared/rules.js';
+import {
+  CLUE_WORD_LIMITS,
+  countWords,
+  cueRuleViolation,
+  MAX_CLUE_LENGTH,
+} from '../../shared/rules.js';
 import { BoardView } from '../common/board-view.js';
 import { type Child, formatSeconds, h, replaceChildren, requireElement } from '../common/dom.js';
 import {
@@ -505,8 +510,9 @@ function renderGame(user: AuthUser, room: RoomSummary): void {
       next.card?.map(formatCoord).join(',') ?? '',
       next.target ? formatCoord(next.target) : '',
       // Settings that change the round panel's own controls.
-      next.settings.enforceClueWordLimits,
+      next.settings.enforceCueRules,
       next.settings.useSecondClue,
+      next.usedCueWords.length,
     ].join('|');
     if (key !== phaseKey) {
       phaseKey = key;
@@ -745,7 +751,7 @@ function clueForm(
       required: '',
       maxlength: String(MAX_CLUE_LENGTH),
       autocomplete: 'off',
-      placeholder: clueNumber === 1 ? 'e.g. ocean' : 'e.g. deep ocean',
+      placeholder: clueNumber === 1 ? 'e.g. ocean' : 'e.g. stormy sea',
     },
   });
   const counter = h('span', { className: 'hint' });
@@ -754,12 +760,17 @@ function clueForm(
     text: submitLabel,
     attrs: { type: 'submit' },
   });
+  const usedWords = new Set(state.usedCueWords);
   const validate = (): void => {
     const words = countWords(input.value);
-    const tooMany = state.settings.enforceClueWordLimits && words > limit;
-    counter.textContent = `${String(words)} / ${String(limit)} word${limit === 1 ? '' : 's'}`;
-    counter.classList.toggle('hint--error', tooMany);
-    submit.disabled = words === 0 || tooMany;
+    const violation =
+      state.settings.enforceCueRules && words > 0
+        ? cueRuleViolation(input.value, clueNumber, usedWords)
+        : null;
+    counter.textContent =
+      violation ?? `${String(words)} / ${String(limit)} word${limit === 1 ? '' : 's'}`;
+    counter.classList.toggle('hint--error', violation !== null);
+    submit.disabled = words === 0 || violation !== null;
   };
   input.addEventListener('input', validate);
   validate();
@@ -810,7 +821,8 @@ function buildSettings(onChange: (patch: Partial<GameSettings>) => void): Settin
     { key: 'useSecondClue', label: 'Use a second (two-word) clue each round' },
     { key: 'allowGuessChanges', label: 'Let chatters change their guess' },
     { key: 'requireGuessCommand', label: 'Require !guess (ignore bare “F12”)' },
-    { key: 'enforceClueWordLimits', label: 'Enforce clue word limits' },
+    { key: 'oneGuessPerSquare', label: 'One guess per square (official rule)' },
+    { key: 'enforceCueRules', label: 'Enforce official cue rules' },
   ];
   const checkboxes = toggles.map(({ key, label }) => {
     const input = h('input', { attrs: { type: 'checkbox', id: `setting-${key}` } });

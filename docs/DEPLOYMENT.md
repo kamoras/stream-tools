@@ -23,6 +23,11 @@ every call needs that app's own token from `env/internal-<app>.env`, so a compro
 another app's API. The tokens are generated on the server by the first deploy and kept from then
 on; only the dashboard holds all of them (`env/internal-admin.env`).
 
+The apps share the VM but can't get in each other's way. Each has its own container, database and
+Twitch connection: Hues & Cues reads chat anonymously and never posts as the bot. Hues & Cues and
+the dashboard have memory and CPU caps (`mem_limit`, `cpus` in the compose file), so a busy game
+can't starve the bot.
+
 | Path on the VM                     | Contents                                                               |
 | ---------------------------------- | ---------------------------------------------------------------------- |
 | `docker-compose.yml`, `caddy/`, `sites-available/`, `scripts/` | Copied from `infra/` on every deploy  |

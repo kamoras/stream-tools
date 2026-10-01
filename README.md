@@ -33,7 +33,7 @@ own container with its own data directory and configuration.
 **Administration** happens in one place: the [admin dashboard](apps/admin/README.md) at
 `https://<bot domain>/admin/<ADMIN_PATH>`, with a single login (`ADMIN_PASSWORD`). Apps have no admin
 pages of their own. Each exposes a small internal admin API on port 9000, which is reachable only
-on the server's private Docker network and protected by a shared token generated on the server.
+on the server's private Docker network and protected by its own token, generated on the server and held only by the dashboard.
 
 ## Local development
 

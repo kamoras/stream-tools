@@ -82,12 +82,36 @@ describe('GameEngine', () => {
       expect(engine.getPublicState().clues).toEqual(['ocean']);
       engine.closeGuessing();
       expect(() => engine.giveClue('very deep sea')).toThrow(/at most 2 words/u);
-      engine.giveClue('deep   ocean');
-      expect(engine.getPublicState().clues).toEqual(['ocean', 'deep ocean']);
+      engine.giveClue('deep   sea');
+      expect(engine.getPublicState().clues).toEqual(['ocean', 'deep sea']);
     });
 
-    it('allows longer clues when limits are disabled', () => {
-      engine.updateSettings({ enforceClueWordLimits: false });
+    it('enforces the official cue rules', () => {
+      startRound();
+      expect(() => engine.giveClue('Blue')).toThrow(/Basic colour names/u);
+      expect(() => engine.giveClue('greenish')).toThrow(/Basic colour names/u);
+      expect(() => engine.giveClue('F12')).toThrow(/letters or numbers/u);
+      engine.giveClue('ocean');
+      engine.closeGuessing();
+      expect(() => engine.giveClue('darker')).toThrow(/first guesses/u);
+      expect(() => engine.giveClue('Ocean!')).toThrow(/already used/u);
+      engine.giveClue('stormy sea');
+      expect(engine.getHostState().usedCueWords).toEqual(['ocean', 'stormy', 'sea']);
+    });
+
+    it('forbids repeating cue words until a new game', () => {
+      startRound();
+      engine.giveClue('ocean');
+      engine.reveal();
+      startRound();
+      expect(() => engine.giveClue('ocean')).toThrow(/already used/u);
+      engine.resetScores();
+      engine.giveClue('ocean');
+      expect(engine.currentPhase).toBe('guessing');
+    });
+
+    it('allows any clue when the cue rules are disabled', () => {
+      engine.updateSettings({ enforceCueRules: false });
       startRound();
       engine.giveClue('the deep blue sea');
       expect(engine.currentPhase).toBe('guessing');
@@ -113,6 +137,7 @@ describe('GameEngine', () => {
     });
 
     it('lets players change their guess when allowed', () => {
+      engine.updateSettings({ allowGuessChanges: true });
       startRound();
       engine.giveClue('ocean');
       expect(engine.submitGuess(guess('a', { row: 0, col: 0 }))).toBe('accepted');
@@ -123,15 +148,46 @@ describe('GameEngine', () => {
       expect(state.cellCounts).toEqual([[31, 1]]);
     });
 
-    it('locks guesses when changes are disabled', () => {
-      engine.updateSettings({ allowGuessChanges: false });
+    it('locks guesses by default, like placed pieces', () => {
       startRound();
       engine.giveClue('ocean');
       engine.submitGuess(guess('a', { row: 0, col: 0 }));
       expect(engine.submitGuess(guess('a', { row: 1, col: 1 }))).toBe('rejected_already_guessed');
     });
 
+    it('allows one guess per square, first come first served', () => {
+      startRound();
+      engine.giveClue('ocean');
+      expect(engine.submitGuess(guess('a', { row: 2, col: 2 }))).toBe('accepted');
+      expect(engine.submitGuess(guess('b', { row: 2, col: 2 }))).toBe('rejected_occupied');
+      engine.closeGuessing();
+      engine.giveClue('stormy sea');
+      expect(engine.submitGuess(guess('b', { row: 2, col: 2 }))).toBe('rejected_occupied');
+      expect(engine.submitGuess(guess('b', { row: 2, col: 3 }))).toBe('accepted');
+    });
+
+    it("never lets a player's second guess share their first guess's square", () => {
+      engine.updateSettings({ oneGuessPerSquare: false });
+      startRound();
+      engine.giveClue('ocean');
+      engine.submitGuess(guess('a', { row: 2, col: 2 }));
+      expect(engine.submitGuess(guess('b', { row: 2, col: 2 }))).toBe('accepted');
+      engine.closeGuessing();
+      engine.giveClue('stormy sea');
+      expect(engine.submitGuess(guess('a', { row: 2, col: 2 }))).toBe('rejected_occupied');
+    });
+
+    it('frees a square when its guess moves', () => {
+      engine.updateSettings({ allowGuessChanges: true });
+      startRound();
+      engine.giveClue('ocean');
+      engine.submitGuess(guess('a', { row: 2, col: 2 }));
+      expect(engine.submitGuess(guess('a', { row: 2, col: 3 }))).toBe('updated');
+      expect(engine.submitGuess(guess('b', { row: 2, col: 2 }))).toBe('accepted');
+    });
+
     it('aggregates guesses per cell and orders recent guesses', () => {
+      engine.updateSettings({ oneGuessPerSquare: false });
       startRound();
       engine.giveClue('ocean');
       engine.submitGuess(guess('a', { row: 2, col: 2 }));
@@ -149,7 +205,7 @@ describe('GameEngine', () => {
       engine.giveClue('ocean');
       engine.submitGuess(guess('a', { row: 0, col: 0 }));
       engine.closeGuessing();
-      engine.giveClue('deep ocean');
+      engine.giveClue('stormy sea');
       expect(engine.submitGuess(guess('a', { row: 5, col: 5 }))).toBe('accepted');
       expect(engine.getPublicState().totalGuesses).toBe(2);
     });
@@ -186,9 +242,9 @@ describe('GameEngine', () => {
       engine.submitGuess(guess('ring2', offset(target, 2, 0)));
       engine.submitGuess(guess('far', offset(target, 0, 3 * (target.col > 15 ? -1 : 1))));
       engine.closeGuessing();
-      engine.giveClue('deep ocean');
+      engine.giveClue('stormy sea');
       engine.submitGuess(guess('far', offset(target, 1, 0)));
-      engine.submitGuess(guess('exact', target));
+      engine.submitGuess(guess('exact', offset(target, 0, 1)));
       engine.closeGuessing();
 
       const state = engine.getPublicState();
@@ -196,14 +252,15 @@ describe('GameEngine', () => {
       const result = state.lastResult;
       expect(result?.target).toEqual(target);
       const points = Object.fromEntries(result?.awards.map((a) => [a.userId, a.points]) ?? []);
-      expect(points).toEqual({ exact: 6, near: 2, ring2: 1, far: 2 });
+      // A player's two pieces can't share a square, so 5 is the most per round.
+      expect(points).toEqual({ exact: 5, near: 2, ring2: 1, far: 2 });
       expect(result?.awards[0]?.userId).toBe('exact');
-      // Host earns a point per guess within one square: exact×2, near, far (2nd).
+      // Host earns a point per guess within the 3×3 frame: exact×2, near, far (2nd).
       expect(result?.hostPoints).toBe(4);
       expect(state.hostScore).toBe(4);
       expect(result?.totalGuessers).toBe(4);
       expect(state.leaderboard.map((p) => [p.userId, p.score])).toEqual([
-        ['exact', 6],
+        ['exact', 5],
         ['far', 2],
         ['near', 2],
         ['ring2', 1],
@@ -271,6 +328,7 @@ describe('GameEngine', () => {
         snapshot: gameSnapshotSchema.parse(json),
       });
       expect(restored.getHostState()).toEqual(engine.getHostState());
+      expect(restored.getHostState().usedCueWords).toEqual(['ocean']);
 
       restored.reveal();
       expect(restored.getPublicState().lastResult?.hostPoints).toBe(2);
@@ -285,6 +343,12 @@ describe('GameEngine', () => {
         snapshot: gameSnapshotSchema.parse(engine.toSnapshot()),
       });
       expect(restored.getPublicState()).toEqual(engine.getPublicState());
+    });
+
+    it('loads snapshots saved before cue words were recorded', () => {
+      const older: Partial<ReturnType<typeof engine.toSnapshot>> = engine.toSnapshot();
+      delete older.usedCueWords;
+      expect(gameSnapshotSchema.parse(older).usedCueWords).toEqual([]);
     });
 
     it('falls back to default settings if stored settings are invalid', () => {

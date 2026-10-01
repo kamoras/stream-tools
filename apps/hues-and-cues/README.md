@@ -41,37 +41,73 @@ For development with hot reload, run `cp .env.example .env`, then `npm run dev`,
 
 ## How a round works
 
-1. **Draw a card** — four well-separated colours appear, visible only to you.
-2. **Pick a colour** and enter a **one-word clue**. Guessing opens on stream.
-3. Chat types coordinates (your own messages don't count, since you know the answer). Each chatter
-   gets one guess per clue (they may move it while guessing
-   is open unless you disable that).
-4. Guessing closes when the timer runs out or you close it. Give a **second clue** (up to two
-   words) for a second guess, or reveal immediately.
-5. **Reveal** — the target and its scoring frames appear on the board.
+The game follows the official _Hues and Cues_ rules, with you as the cue giver and chat as the
+players.
+
+1. **Draw a card.** Four colours appear, visible only to you. Pick one in secret.
+2. **Give a one-word cue.** Guessing opens on stream, and chat types coordinates such as `F12`.
+   Each chatter places one guess. Your own messages don't count, since you know the answer.
+3. **Give a second cue** of one or two words when guessing closes, for a second guess. Or skip it
+   and reveal straight away, as the rules allow.
+4. **Reveal.** The target and the scoring frame appear on the board.
+
+### Cue rules
+
+The official cue rules, enforced by default ("Enforce official cue rules"):
+
+- The first cue is one word; the second is one or two words.
+- No basic colour names: black, blue, brown, grey/gray, green, orange, pink, purple, red, white or
+  yellow (or simple variants such as "reddish"). Specific names such as "lavender" or "teal" are
+  fine.
+- No references to the board's letters or numbers.
+- No word already used in a cue this game.
+- The second cue can't point from the first guesses, for example "lighter", "darker" or "left".
+
+The rules also forbid comparing the colour to objects in the room. That can't be checked
+automatically, so it's up to you.
+
+### Placing guesses
+
+As on the physical board, only one guess fits on each square ("One guess per square"), first come
+first served. A player's two guesses can never share a square. Guesses are final once placed,
+unless you turn on "Let chatters change their guess".
 
 ### Scoring
 
-Each guess scores by its distance from the target, measured in squares (diagonals count as one):
+Points depend on each guess's distance from the target, measured in squares (diagonals count as
+one):
 
-| Guess position             | Points |
-| -------------------------- | -----: |
-| On the target              |      3 |
-| In the 3×3 frame around it |      2 |
-| In the 5×5 frame around it |      1 |
+| Guess position                               | Points |
+| -------------------------------------------- | -----: |
+| On the target                                |      3 |
+| Inside the 3×3 scoring frame                 |      2 |
+| Touching the frame's outside edge (5×5 ring) |      1 |
 
-Both of a player's guesses score. The streamer earns one point for every guess inside the 3×3
-frame — a good clue pays off.
+Both of a player's guesses score, so 5 is the most anyone can earn in a round. You, the cue giver,
+earn one point for every guess inside the scoring frame. With one guess per square that's at most 9.
+
+**Reset scores** starts a new game, which also clears the list of used cue words.
+
+### Adapted for Twitch
+
+- **You are always the cue giver.** The board game passes the role around; on stream, the
+  streamer gives every cue.
+- **There is no fixed end.** The board game ends after everyone has given cues once or twice. Here
+  you play as many rounds as you like, and the leaderboard shows the standings.
+- **No 3-player bonus.** The board game doubles the cue giver's points with exactly three players.
+  That doesn't apply to an open chat.
+- **Guesses arrive in chat order.** There are no turns around the table.
 
 ### Settings (control panel)
 
-| Setting                   | Default | Description                                          |
-| ------------------------- | ------- | ---------------------------------------------------- |
-| Guess timer               | 45 s    | `0` means guessing stays open until you close it     |
-| Second clue               | on      | Adds the two-word clue and second guess              |
-| Let chatters change guess | on      | Latest guess counts while guessing is open           |
-| Require `!guess`          | off     | Ignore bare `F12` messages; only `!guess F12` counts |
-| Enforce clue word limits  | on      | One word, then two                                   |
+| Setting                         | Default | Description                                                   |
+| ------------------------------- | ------- | ------------------------------------------------------------- |
+| Guess timer                     | 45 s    | `0` means guessing stays open until you close it              |
+| Second clue                     | on      | Adds the two-word cue and second guess                        |
+| Let chatters change their guess | off     | Latest guess counts while guessing is open (not official)     |
+| Require `!guess`                | off     | Ignore bare `F12` messages; only `!guess F12` counts          |
+| One guess per square            | on      | Official rule; turn off for very large chats                  |
+| Enforce official cue rules      | on      | Word limits, no basic colours, no board positions, no repeats |
 
 Accepted chat formats: `F12`, `f12`, `F 12`, `F-12`, `12F`, `!guess F12`, `!g F12`, `!hue F12`.
 

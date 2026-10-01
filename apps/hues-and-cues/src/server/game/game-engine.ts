@@ -19,8 +19,8 @@ import {
 } from '../../shared/protocol.js';
 import {
   CARD_SIZE,
-  CLUE_WORD_LIMITS,
-  countWords,
+  cueRuleViolation,
+  cueWords,
   HOST_SCORING_DISTANCE,
   pointsForGuess,
 } from '../../shared/rules.js';
@@ -49,6 +49,7 @@ export type GuessOutcome =
   | 'unchanged'
   | 'rejected_closed'
   | 'rejected_already_guessed'
+  | 'rejected_occupied'
   | 'rejected_capacity';
 
 export interface GameEngineOptions {
@@ -103,6 +104,8 @@ export class GameEngine {
   private readonly leaderboard = new Map<string, MutablePlayerScore>();
   private hostScore = 0;
   private lastResult: RoundResult | null = null;
+  /** Words used in cues since the scores were last reset (one "game"). */
+  private readonly usedCueWords = new Set<string>();
 
   public constructor(options: GameEngineOptions) {
     this.channel = options.channel;
@@ -168,14 +171,12 @@ export class GameEngine {
     if (clue === '') {
       throw new GameError('bad_request', 'The clue cannot be empty.');
     }
-    const wordLimit = CLUE_WORD_LIMITS[clueNumber];
-    if (this.settings.enforceClueWordLimits && countWords(clue) > wordLimit) {
-      throw new GameError(
-        'bad_request',
-        `Clue ${clueNumber} may be at most ${wordLimit} word${wordLimit === 1 ? '' : 's'}.`,
-      );
+    if (this.settings.enforceCueRules) {
+      const violation = cueRuleViolation(clue, clueNumber, this.usedCueWords);
+      if (violation !== null) throw new GameError('bad_request', violation);
     }
 
+    for (const word of cueWords(clue)) this.usedCueWords.add(word);
     round.clues.push(clue);
     round.activeClue = clueNumber;
     round.deadline =
@@ -210,8 +211,10 @@ export class GameEngine {
     this.phase = 'idle';
   }
 
+  /** Starts a new game: clears scores and the record of cues used. */
   public resetScores(): void {
     this.leaderboard.clear();
+    this.usedCueWords.clear();
     this.hostScore = 0;
     this.lastResult = null;
   }
@@ -260,6 +263,9 @@ export class GameEngine {
       }
     } else if (guesses.size >= MAX_GUESSES_PER_CLUE) {
       return 'rejected_capacity';
+    }
+    if (this.isSquareTaken(round, input.userId, input.coord)) {
+      return 'rejected_occupied';
     }
 
     // Delete first so the map's insertion order stays "most recent last".
@@ -313,6 +319,7 @@ export class GameEngine {
       ...this.getPublicState(),
       card: round ? [...round.card] : null,
       target,
+      usedCueWords: [...this.usedCueWords],
     };
   }
 
@@ -351,6 +358,7 @@ export class GameEngine {
           bestGuess: { ...award.bestGuess },
         })),
       },
+      usedCueWords: [...this.usedCueWords],
     };
   }
 
@@ -358,6 +366,7 @@ export class GameEngine {
     this.settings = { ...DEFAULT_SETTINGS, ...snapshot.settings };
     this.roundNumber = snapshot.roundNumber;
     this.hostScore = snapshot.hostScore;
+    for (const word of snapshot.usedCueWords) this.usedCueWords.add(word);
     this.lastResult = snapshot.lastResult;
     for (const player of snapshot.leaderboard) {
       this.leaderboard.set(player.userId, { ...player });
@@ -385,6 +394,28 @@ export class GameEngine {
   // ---------------------------------------------------------------------------
   // Internals
   // ---------------------------------------------------------------------------
+
+  /**
+   * Whether a guess at `coord` would break the one-piece-per-square rules. A
+   * player's second guess can never share their first guess's square (in the
+   * board game both pieces are on the board), and with `oneGuessPerSquare`
+   * nobody may take a square another player holds. Moving within the same
+   * clue frees the player's previous square.
+   */
+  private isSquareTaken(round: Round, userId: string, coord: Coord): boolean {
+    const activeIndex = (round.activeClue ?? 1) - 1;
+    for (const [index, guesses] of round.guesses.entries()) {
+      for (const guess of guesses.values()) {
+        if (guess.coord.row !== coord.row || guess.coord.col !== coord.col) continue;
+        if (guess.userId === userId) {
+          if (index !== activeIndex) return true;
+        } else if (this.settings.oneGuessPerSquare) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
 
   private revealAndScore(round: Round): void {
     const target = round.targetIndex === null ? undefined : round.card[round.targetIndex];

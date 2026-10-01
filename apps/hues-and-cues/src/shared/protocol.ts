@@ -26,23 +26,29 @@ export const MAX_GUESS_DURATION_SECONDS = 600;
 export const gameSettingsSchema = z.object({
   /** Seconds guessing stays open after a clue; 0 means the host closes it manually. */
   guessDurationSeconds: z.number().int().min(0).max(MAX_GUESS_DURATION_SECONDS),
-  /** Whether chatters may move their guess while guessing is open. */
+  /**
+   * Whether chatters may move their guess while guessing is open. Off by
+   * default: in the board game a placed piece stays put.
+   */
   allowGuessChanges: z.boolean(),
+  /** Official rule: only one guess per square, first come first served. */
+  oneGuessPerSquare: z.boolean(),
   /** Whether rounds include the optional second (two-word) clue. */
   useSecondClue: z.boolean(),
   /** Require `!guess F12` rather than accepting a bare `F12` in chat. */
   requireGuessCommand: z.boolean(),
-  /** Enforce the one-word / two-word clue limits. */
-  enforceClueWordLimits: z.boolean(),
+  /** Enforce the official cue rules (see `cueRuleViolation` in rules.ts). */
+  enforceCueRules: z.boolean(),
 });
 export type GameSettings = z.infer<typeof gameSettingsSchema>;
 
 export const DEFAULT_SETTINGS: GameSettings = {
   guessDurationSeconds: 45,
-  allowGuessChanges: true,
+  allowGuessChanges: false,
+  oneGuessPerSquare: true,
   useSecondClue: true,
   requireGuessCommand: false,
-  enforceClueWordLimits: true,
+  enforceCueRules: true,
 };
 
 export const coordSchema = z.object({
@@ -150,6 +156,8 @@ export interface PublicGameState {
 export interface HostGameState extends PublicGameState {
   readonly card: readonly Coord[] | null;
   readonly target: Coord | null;
+  /** Cue words already used this game; the rules forbid repeating them. */
+  readonly usedCueWords: readonly string[];
 }
 
 export type ErrorCode =

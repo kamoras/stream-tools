@@ -56,6 +56,8 @@ export const gameSnapshotSchema = z
     leaderboard: z.array(playerScoreSchema),
     hostScore: z.number().int().nonnegative(),
     lastResult: roundResultSchema.nullable(),
+    /** Added after version 1 shipped; older snapshots have none. */
+    usedCueWords: z.array(z.string()).default([]),
   })
   .superRefine((snapshot, ctx) => {
     // Reject internally inconsistent state instead of letting it crash the engine later.

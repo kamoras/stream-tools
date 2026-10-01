@@ -62,6 +62,10 @@ services:
     env_file: [env/internal-hues-and-cues.env, env/hues-and-cues.env]
     environment:
       TRUST_PROXY: 'true'
+    # Caps so a busy game can never starve the bot on the shared VM. Each
+    # password hash needs 32 MB and Node runs up to four at once.
+    mem_limit: 384m
+    cpus: 1.0
     volumes:
       - ./data/hues-and-cues:/data
     logging: *logging
@@ -73,6 +77,8 @@ services:
     env_file: [env/internal-admin.env, env/admin.env]
     environment:
       TRUST_PROXY: 'true'
+    mem_limit: 128m
+    cpus: 0.5
     logging: *logging
 
 volumes:
