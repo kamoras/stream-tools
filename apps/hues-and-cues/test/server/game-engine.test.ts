@@ -94,17 +94,18 @@ describe('GameEngine', () => {
       engine.giveClue('ocean');
       engine.closeGuessing();
       expect(() => engine.giveClue('darker')).toThrow(/first guesses/u);
-      expect(() => engine.giveClue('Ocean!')).toThrow(/already used/u);
-      engine.giveClue('stormy sea');
-      expect(engine.getHostState().usedCueWords).toEqual(['ocean', 'stormy', 'sea']);
+      expect(() => engine.giveClue('Ocean!')).toThrow(/already given/u);
+      // Only whole cues may not repeat; reusing a word is fine.
+      engine.giveClue('deep ocean');
+      expect(engine.getHostState().usedCues).toEqual(['ocean', 'deep ocean']);
     });
 
-    it('forbids repeating cue words until a new game', () => {
+    it('forbids repeating a cue until a new game', () => {
       startRound();
       engine.giveClue('ocean');
       engine.reveal();
       startRound();
-      expect(() => engine.giveClue('ocean')).toThrow(/already used/u);
+      expect(() => engine.giveClue('ocean')).toThrow(/already given/u);
       engine.resetScores();
       engine.giveClue('ocean');
       expect(engine.currentPhase).toBe('guessing');
@@ -328,7 +329,7 @@ describe('GameEngine', () => {
         snapshot: gameSnapshotSchema.parse(json),
       });
       expect(restored.getHostState()).toEqual(engine.getHostState());
-      expect(restored.getHostState().usedCueWords).toEqual(['ocean']);
+      expect(restored.getHostState().usedCues).toEqual(['ocean']);
 
       restored.reveal();
       expect(restored.getPublicState().lastResult?.hostPoints).toBe(2);
@@ -347,13 +348,28 @@ describe('GameEngine', () => {
 
     it('loads snapshots saved before cue words were recorded', () => {
       const older: Partial<ReturnType<typeof engine.toSnapshot>> = engine.toSnapshot();
-      delete older.usedCueWords;
-      expect(gameSnapshotSchema.parse(older).usedCueWords).toEqual([]);
+      delete older.usedCues;
+      expect(gameSnapshotSchema.parse(older).usedCues).toEqual([]);
     });
 
-    it('falls back to default settings if stored settings are invalid', () => {
-      const snapshot = { ...engine.toSnapshot(), settings: { guessDurationSeconds: -5 } };
-      expect(gameSnapshotSchema.parse(snapshot).settings.guessDurationSeconds).toBe(45);
+    it('replaces only invalid or missing stored settings with defaults', () => {
+      const snapshot = {
+        ...engine.toSnapshot(),
+        // An old snapshot: an invalid value, a renamed setting, others missing.
+        settings: { guessDurationSeconds: -5, useSecondClue: false, enforceClueWordLimits: true },
+      };
+      const restored = new GameEngine({
+        channel: 'streamer',
+        snapshot: gameSnapshotSchema.parse(snapshot),
+      });
+      expect(restored.currentSettings).toEqual({
+        guessDurationSeconds: 45,
+        allowGuessChanges: false,
+        oneGuessPerSquare: true,
+        useSecondClue: false,
+        requireGuessCommand: false,
+        enforceCueRules: true,
+      });
     });
   });
 });

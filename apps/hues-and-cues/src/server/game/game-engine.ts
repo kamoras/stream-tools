@@ -20,7 +20,7 @@ import {
 import {
   CARD_SIZE,
   cueRuleViolation,
-  cueWords,
+  normalizeCue,
   HOST_SCORING_DISTANCE,
   pointsForGuess,
 } from '../../shared/rules.js';
@@ -104,8 +104,8 @@ export class GameEngine {
   private readonly leaderboard = new Map<string, MutablePlayerScore>();
   private hostScore = 0;
   private lastResult: RoundResult | null = null;
-  /** Words used in cues since the scores were last reset (one "game"). */
-  private readonly usedCueWords = new Set<string>();
+  /** Cues given since the scores were last reset (one "game"), normalised. */
+  private readonly usedCues = new Set<string>();
 
   public constructor(options: GameEngineOptions) {
     this.channel = options.channel;
@@ -172,11 +172,11 @@ export class GameEngine {
       throw new GameError('bad_request', 'The clue cannot be empty.');
     }
     if (this.settings.enforceCueRules) {
-      const violation = cueRuleViolation(clue, clueNumber, this.usedCueWords);
+      const violation = cueRuleViolation(clue, clueNumber, this.usedCues);
       if (violation !== null) throw new GameError('bad_request', violation);
     }
 
-    for (const word of cueWords(clue)) this.usedCueWords.add(word);
+    this.usedCues.add(normalizeCue(clue));
     round.clues.push(clue);
     round.activeClue = clueNumber;
     round.deadline =
@@ -211,10 +211,10 @@ export class GameEngine {
     this.phase = 'idle';
   }
 
-  /** Starts a new game: clears scores and the record of cues used. */
+  /** Starts a new game: clears scores and the record of cues given. */
   public resetScores(): void {
     this.leaderboard.clear();
-    this.usedCueWords.clear();
+    this.usedCues.clear();
     this.hostScore = 0;
     this.lastResult = null;
   }
@@ -319,7 +319,7 @@ export class GameEngine {
       ...this.getPublicState(),
       card: round ? [...round.card] : null,
       target,
-      usedCueWords: [...this.usedCueWords],
+      usedCues: [...this.usedCues],
     };
   }
 
@@ -358,15 +358,20 @@ export class GameEngine {
           bestGuess: { ...award.bestGuess },
         })),
       },
-      usedCueWords: [...this.usedCueWords],
+      usedCues: [...this.usedCues],
     };
   }
 
   private restore(snapshot: GameSnapshot): void {
-    this.settings = { ...DEFAULT_SETTINGS, ...snapshot.settings };
+    // Stored settings are kept field by field, so one invalid or renamed
+    // setting falls back to its default without resetting the others.
+    this.settings = { ...DEFAULT_SETTINGS };
+    for (const [key, value] of Object.entries(snapshot.settings)) {
+      if (value !== undefined) Object.assign(this.settings, { [key]: value });
+    }
     this.roundNumber = snapshot.roundNumber;
     this.hostScore = snapshot.hostScore;
-    for (const word of snapshot.usedCueWords) this.usedCueWords.add(word);
+    for (const cue of snapshot.usedCues) this.usedCues.add(cue);
     this.lastResult = snapshot.lastResult;
     for (const player of snapshot.leaderboard) {
       this.leaderboard.set(player.userId, { ...player });

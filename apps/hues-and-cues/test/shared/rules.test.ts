@@ -9,6 +9,7 @@ describe('cueRuleViolation', () => {
       expect(cueRuleViolation(cue, 1, none)).toBeNull();
     }
     expect(cueRuleViolation('a lemon', 2, none)).toBeNull();
+    expect(cueRuleViolation('i scream', 2, none)).toBeNull();
   });
 
   it('limits cue 1 to one word and cue 2 to two', () => {
@@ -17,23 +18,50 @@ describe('cueRuleViolation', () => {
   });
 
   it('forbids the basic colour names, including simple variants', () => {
-    for (const cue of ['red', 'GREY', 'gray', 'reddish', 'pinky', 'blues', 'orangey']) {
+    for (const cue of [
+      'red',
+      'GREY',
+      'gray',
+      'reddish',
+      'pinky',
+      'blues',
+      'orangey',
+      'bluish',
+      'purplish',
+      'whitish',
+      'purply',
+      'redder',
+      'greener',
+      'bluest',
+    ]) {
       expect(cueRuleViolation(cue, 1, none)).toMatch(/Basic colour names/u);
     }
   });
 
   it("forbids the board's letters and numbers", () => {
-    for (const cue of ['F12', 'f-12', '12F', '7']) {
-      expect(cueRuleViolation(cue, 1, none)).toMatch(/letters or numbers/u);
+    for (const cue of ['F12', '12F', '7', 'f', 'twelve', 'twelfth', 'twenty-one']) {
+      expect(cueRuleViolation(cue, 2, none)).toMatch(/letters or numbers/u);
     }
   });
 
-  it('forbids repeating a cue word', () => {
-    expect(cueRuleViolation('Ocean.', 1, new Set(['ocean']))).toMatch(/already used/u);
+  it('forbids repeating a whole cue, not reusing its words', () => {
+    const used = new Set(['ocean', 'deep sea']);
+    expect(cueRuleViolation('Ocean.', 1, used)).toMatch(/already given/u);
+    expect(cueRuleViolation('deep  SEA', 2, used)).toMatch(/already given/u);
+    expect(cueRuleViolation('deep ocean', 2, used)).toBeNull();
+    expect(cueRuleViolation('the sea', 2, new Set(['the moon']))).toBeNull();
+  });
+
+  it('treats hyphens, underscores and slashes as word breaks', () => {
+    expect(cueRuleViolation('deep-sea', 1, none)).toMatch(/at most 1 word/u);
+    expect(cueRuleViolation('sky-blue', 2, none)).toMatch(/Basic colour names/u);
+    expect(cueRuleViolation('blue/green', 2, none)).toMatch(/Basic colour names/u);
   });
 
   it('forbids pointing from the first guesses in cue 2 only', () => {
-    expect(cueRuleViolation('slightly darker', 2, none)).toMatch(/first guesses/u);
+    for (const cue of ['slightly darker', 'paler', 'more', 'warmer']) {
+      expect(cueRuleViolation(cue, 2, none)).toMatch(/first guesses/u);
+    }
     expect(cueRuleViolation('down', 1, none)).toBeNull();
   });
 });

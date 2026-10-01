@@ -512,7 +512,7 @@ function renderGame(user: AuthUser, room: RoomSummary): void {
       // Settings that change the round panel's own controls.
       next.settings.enforceCueRules,
       next.settings.useSecondClue,
-      next.usedCueWords.length,
+      next.usedCues.length,
     ].join('|');
     if (key !== phaseKey) {
       phaseKey = key;
@@ -760,12 +760,12 @@ function clueForm(
     text: submitLabel,
     attrs: { type: 'submit' },
   });
-  const usedWords = new Set(state.usedCueWords);
+  const usedCues = new Set(state.usedCues);
   const validate = (): void => {
     const words = countWords(input.value);
     const violation =
       state.settings.enforceCueRules && words > 0
-        ? cueRuleViolation(input.value, clueNumber, usedWords)
+        ? cueRuleViolation(input.value, clueNumber, usedCues)
         : null;
     counter.textContent =
       violation ?? `${String(words)} / ${String(limit)} word${limit === 1 ? '' : 's'}`;

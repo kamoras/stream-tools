@@ -55,13 +55,17 @@ players.
 
 The official cue rules, enforced by default ("Enforce official cue rules"):
 
-- The first cue is one word; the second is one or two words.
+- The first cue is one word; the second is one or two words. Hyphens count as word breaks, so
+  "deep-sea" is two words.
 - No basic colour names: black, blue, brown, grey/gray, green, orange, pink, purple, red, white or
-  yellow (or simple variants such as "reddish"). Specific names such as "lavender" or "teal" are
-  fine.
-- No references to the board's letters or numbers.
-- No word already used in a cue this game.
-- The second cue can't point from the first guesses, for example "lighter", "darker" or "left".
+  yellow, nor simple variants such as "reddish", "bluish" or "greener". Specific names such as
+  "lavender" or "teal" are fine.
+- No references to the board's letters or numbers, such as "F12", "12", a lone row letter, or
+  "twelve".
+- No repeating a cue already given this game. Reusing a word is fine: "ocean" then "deep ocean"
+  is allowed.
+- The second cue can't compare against the first guesses, for example "lighter", "darker",
+  "paler", "more" or "left".
 
 The rules also forbid comparing the colour to objects in the room. That can't be checked
 automatically, so it's up to you.
@@ -86,7 +90,7 @@ one):
 Both of a player's guesses score, so 5 is the most anyone can earn in a round. You, the cue giver,
 earn one point for every guess inside the scoring frame. With one guess per square that's at most 9.
 
-**Reset scores** starts a new game, which also clears the list of used cue words.
+**Reset scores** starts a new game, which also clears the list of cues already given.
 
 ### Adapted for Twitch
 

@@ -1,5 +1,21 @@
 import { z } from 'zod';
-import { coordSchema, DEFAULT_SETTINGS, gameSettingsSchema } from '../../shared/protocol.js';
+import { coordSchema, gameSettingsSchema } from '../../shared/protocol.js';
+
+/**
+ * Stored settings, field by field: an invalid, missing or renamed setting is
+ * dropped (and later replaced by its default) without discarding the rest.
+ */
+const { shape: settingsShape } = gameSettingsSchema;
+const storedSettingsSchema = z
+  .object({
+    guessDurationSeconds: settingsShape.guessDurationSeconds.optional().catch(undefined),
+    allowGuessChanges: settingsShape.allowGuessChanges.optional().catch(undefined),
+    oneGuessPerSquare: settingsShape.oneGuessPerSquare.optional().catch(undefined),
+    useSecondClue: settingsShape.useSecondClue.optional().catch(undefined),
+    requireGuessCommand: settingsShape.requireGuessCommand.optional().catch(undefined),
+    enforceCueRules: settingsShape.enforceCueRules.optional().catch(undefined),
+  })
+  .catch({});
 
 const clueNumberSchema = z.union([z.literal(1), z.literal(2)]);
 
@@ -52,12 +68,12 @@ export const gameSnapshotSchema = z
     phase: z.enum(['idle', 'picking', 'guessing', 'intermission', 'reveal']),
     roundNumber: z.number().int().nonnegative(),
     round: roundSchema.nullable(),
-    settings: gameSettingsSchema.catch(DEFAULT_SETTINGS),
+    settings: storedSettingsSchema,
     leaderboard: z.array(playerScoreSchema),
     hostScore: z.number().int().nonnegative(),
     lastResult: roundResultSchema.nullable(),
     /** Added after version 1 shipped; older snapshots have none. */
-    usedCueWords: z.array(z.string()).default([]),
+    usedCues: z.array(z.string()).default([]),
   })
   .superRefine((snapshot, ctx) => {
     // Reject internally inconsistent state instead of letting it crash the engine later.

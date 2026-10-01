@@ -156,8 +156,8 @@ export interface PublicGameState {
 export interface HostGameState extends PublicGameState {
   readonly card: readonly Coord[] | null;
   readonly target: Coord | null;
-  /** Cue words already used this game; the rules forbid repeating them. */
-  readonly usedCueWords: readonly string[];
+  /** Cues already given this game (normalised); the rules forbid repeating them. */
+  readonly usedCues: readonly string[];
 }
 
 export type ErrorCode =
