@@ -1,7 +1,9 @@
 import { pino } from 'pino';
 import { loadConfig } from './config.js';
 import { buildApp } from './http/app.js';
+import { AdminAuth } from './admin/admin-auth.js';
 import { AuthService } from './auth/auth-service.js';
+import { InviteRepository } from './auth/invite-codes.js';
 import { SessionRepository } from './auth/session-repository.js';
 import { UserRepository } from './auth/user-repository.js';
 import { openDatabase } from './db/database.js';
@@ -22,13 +24,21 @@ async function main(): Promise<void> {
   });
 
   const db = openDatabase(config.databaseFile, logger);
+  const users = new UserRepository(db);
+  const invites = new InviteRepository(db);
   const auth = new AuthService({
-    users: new UserRepository(db),
+    users,
+    invites,
     sessions: new SessionRepository(db, { ttlMs: config.sessionTtlMs }),
+    transaction: (fn) => db.transaction(fn)(),
     logger,
-    registrationEnabled: config.registrationEnabled,
-    registrationCode: config.registrationCode,
   });
+  const adminAuth = new AdminAuth({ db, password: config.admin?.password, logger });
+  if (!config.admin) {
+    logger.warn(
+      'ADMIN_PASSWORD/ADMIN_PATH are not set: the admin page is disabled, so no invite codes can be generated and nobody can sign up.',
+    );
+  }
   const registry = new RoomRegistry({
     logger,
     store: new RoomStore(db),
@@ -51,10 +61,11 @@ async function main(): Promise<void> {
   chat.on('disconnected', announceChatStatus);
   chat.start();
 
-  const app = await buildApp({ config, auth, registry, chat, logger });
+  const app = await buildApp({ config, auth, adminAuth, invites, users, registry, chat, logger });
   const maintenanceTimer = setInterval(() => {
     registry.prune();
     auth.pruneExpired();
+    adminAuth.pruneExpired();
   }, MAINTENANCE_INTERVAL_MS);
   maintenanceTimer.unref();
 

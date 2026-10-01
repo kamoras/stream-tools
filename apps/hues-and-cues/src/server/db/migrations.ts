@@ -35,4 +35,26 @@ export const MIGRATIONS: readonly string[] = [
     UNIQUE (owner_id, channel)
   ) STRICT;
   `,
+
+  /* 2: single-use invite codes and admin sessions */ `
+  CREATE TABLE invite_codes (
+    id               INTEGER PRIMARY KEY,
+    code_hash        TEXT    NOT NULL UNIQUE,
+    hint             TEXT    NOT NULL,
+    note             TEXT,
+    created_at       INTEGER NOT NULL,
+    expires_at       INTEGER NOT NULL,
+    revoked_at       INTEGER,
+    used_at          INTEGER,
+    used_by_user_id  INTEGER REFERENCES users (id) ON DELETE SET NULL,
+    used_by_username TEXT
+  ) STRICT;
+
+  CREATE TABLE admin_sessions (
+    token_hash TEXT    PRIMARY KEY,
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL
+  ) STRICT;
+  CREATE INDEX admin_sessions_expires_at ON admin_sessions (expires_at);
+  `,
 ];

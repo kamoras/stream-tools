@@ -55,8 +55,17 @@ which blocks cross-site WebSocket hijacking.
 
 **Authorisation.** Every room has an owner. Room endpoints and host WebSocket connections require a
 session whose user owns the room. Overlay URLs contain only the public room id and are read-only, so
-an OBS browser source needs no credentials. `REGISTRATION_CODE`, `REGISTRATION_ENABLED` and
-`ALLOWED_CHANNELS` control who can use a public instance.
+an OBS browser source needs no credentials. `ALLOWED_CHANNELS` can further restrict which channels
+may run games.
+
+**Invite-only sign-up and admin.** Registration requires a single-use invite code, as in the
+dbd-bot. Codes have 60 bits of entropy and are stored only as SHA-256 hashes with a short display
+hint. Creating the account and consuming the code happen in one SQLite transaction, with a
+conditional `UPDATE`, so a code can never create two accounts even under concurrent sign-ups. Codes
+are generated on an admin page under the secret `/admin/<ADMIN_PATH>` prefix (everything else under
+`/admin` is a 404). The admin signs in with `ADMIN_PASSWORD`, compared in constant time and
+throttled, and gets an 8-hour server-side session in its own `SameSite=Strict` cookie. Admin access
+is never tied to a user account, so registering a particular username can't grant it.
 
 **Back-pressure.** Popular channels can produce hundreds of guesses per second. Guess broadcasts are
 coalesced (at most four per second per room), the public state carries a capped list of recent

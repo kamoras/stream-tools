@@ -10,8 +10,8 @@ describe('loadConfig', () => {
       env: 'development',
       host: '0.0.0.0',
       port: 8080,
-      registrationEnabled: true,
-      registrationCode: undefined,
+      admin: undefined,
+      inviteTtlMs: 14 * DAY,
       allowedChannels: undefined,
       trustProxy: false,
       cookieSecure: false,
@@ -27,8 +27,9 @@ describe('loadConfig', () => {
     const config = loadConfig({
       NODE_ENV: 'production',
       PORT: '3000',
-      REGISTRATION_ENABLED: 'false',
-      REGISTRATION_CODE: 'secret',
+      ADMIN_PASSWORD: 'a long admin password',
+      ADMIN_PATH: 'secret-path_1',
+      INVITE_TTL_DAYS: '3',
       ALLOWED_CHANNELS: ' #One, two ,,',
       TRUST_PROXY: 'true',
       SESSION_TTL_DAYS: '7',
@@ -36,8 +37,8 @@ describe('loadConfig', () => {
     expect(config).toMatchObject({
       env: 'production',
       port: 3000,
-      registrationEnabled: false,
-      registrationCode: 'secret',
+      admin: { password: 'a long admin password', path: 'secret-path_1' },
+      inviteTtlMs: 3 * DAY,
       allowedChannels: ['one', 'two'],
       trustProxy: true,
       cookieSecure: true,
@@ -48,6 +49,17 @@ describe('loadConfig', () => {
   it('lets COOKIE_SECURE override the environment default', () => {
     expect(loadConfig({ NODE_ENV: 'production', COOKIE_SECURE: 'false' }).cookieSecure).toBe(false);
     expect(loadConfig({ COOKIE_SECURE: 'true' }).cookieSecure).toBe(true);
+  });
+
+  it('requires ADMIN_PASSWORD and ADMIN_PATH together, and validates them', () => {
+    expect(() => loadConfig({ ADMIN_PASSWORD: 'a long admin password' })).toThrow(/set together/u);
+    expect(() => loadConfig({ ADMIN_PATH: 'secret-path' })).toThrow(/set together/u);
+    expect(() => loadConfig({ ADMIN_PASSWORD: 'short', ADMIN_PATH: 'secret-path' })).toThrow(
+      /ADMIN_PASSWORD/u,
+    );
+    expect(() =>
+      loadConfig({ ADMIN_PASSWORD: 'a long admin password', ADMIN_PATH: 'has/slash' }),
+    ).toThrow(/ADMIN_PATH/u);
   });
 
   it('treats an empty channel list as unrestricted', () => {

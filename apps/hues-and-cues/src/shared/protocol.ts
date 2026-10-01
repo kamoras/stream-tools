@@ -224,7 +224,8 @@ export const newPasswordSchema = z
 export const registerRequestSchema = z.object({
   username: usernameSchema,
   password: newPasswordSchema,
-  registrationCode: z.string().max(256).optional(),
+  /** Single-use code from an admin (see the admin page). */
+  inviteCode: z.string().trim().min(1, 'An invite code is required.').max(64),
 });
 export type RegisterRequest = z.input<typeof registerRequestSchema>;
 
@@ -247,9 +248,54 @@ export interface AuthUser {
   readonly username: string;
 }
 
-export interface PublicConfigResponse {
-  readonly registrationOpen: boolean;
-  readonly registrationCodeRequired: boolean;
+// -----------------------------------------------------------------------------
+// Admin API (mounted under /admin/<ADMIN_PATH>/api)
+// -----------------------------------------------------------------------------
+
+/** `POST …/api/login` */
+export const adminLoginRequestSchema = z.object({
+  password: z.string().min(1).max(PASSWORD_MAX_LENGTH),
+});
+export type AdminLoginRequest = z.input<typeof adminLoginRequestSchema>;
+
+/** `POST …/api/invites` */
+export const createInviteRequestSchema = z.object({
+  note: z.string().trim().max(100).optional(),
+});
+export type CreateInviteRequest = z.input<typeof createInviteRequestSchema>;
+
+export type InviteStatus = 'unused' | 'used' | 'expired' | 'revoked';
+
+export interface InviteSummary {
+  readonly id: number;
+  /** First characters of the code, so the admin can tell codes apart. */
+  readonly hint: string;
+  readonly note: string | null;
+  readonly createdAt: number;
+  readonly expiresAt: number;
+  readonly status: InviteStatus;
+  readonly usedAt: number | null;
+  readonly usedBy: string | null;
+}
+
+export interface CreateInviteResponse {
+  readonly invite: InviteSummary;
+  /** The full code. Shown once; only its hash is stored. */
+  readonly code: string;
+}
+
+export interface AdminUserSummary {
+  readonly id: number;
+  readonly username: string;
+  readonly createdAt: number;
+  readonly lastLoginAt: number | null;
+  readonly channels: readonly string[];
+}
+
+export interface AdminOverviewResponse {
+  readonly invites: readonly InviteSummary[];
+  readonly users: readonly AdminUserSummary[];
+  readonly inviteTtlDays: number;
 }
 
 export interface ApiErrorResponse {

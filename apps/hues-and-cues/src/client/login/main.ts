@@ -4,7 +4,6 @@ import {
   USERNAME_MAX_LENGTH,
   USERNAME_MIN_LENGTH,
 } from '../../shared/endpoints.js';
-import type { PublicConfigResponse } from '../../shared/protocol.js';
 import { api } from '../common/api.js';
 import { h, replaceChildren, requireElement } from '../common/dom.js';
 
@@ -31,7 +30,7 @@ function field(label: string, input: HTMLInputElement, hint?: string): HTMLEleme
   );
 }
 
-function render(mode: Mode, config: PublicConfigResponse): void {
+function render(mode: Mode): void {
   const isRegister = mode === 'register';
   const error = h('p', { className: 'form-error', attrs: { role: 'alert', hidden: '' } });
   const username = h('input', {
@@ -72,7 +71,16 @@ function render(mode: Mode, config: PublicConfigResponse): void {
     },
   });
   const code = h('input', {
-    attrs: { id: 'registration-code', name: 'registrationCode', autocomplete: 'off', required: '' },
+    attrs: {
+      id: 'invite-code',
+      name: 'inviteCode',
+      autocomplete: 'off',
+      autocapitalize: 'characters',
+      spellcheck: 'false',
+      placeholder: 'XXXX-XXXX-XXXX',
+      required: '',
+      maxlength: '64',
+    },
   });
   const submit = h('button', {
     className: 'button button--primary',
@@ -104,8 +112,11 @@ function render(mode: Mode, config: PublicConfigResponse): void {
     ),
     isRegister && field('Confirm password', confirm),
     isRegister &&
-      config.registrationCodeRequired &&
-      field('Registration code', code, 'Ask the server owner for this.'),
+      field(
+        'Invite code',
+        code,
+        'Sign-up is invite-only. Ask the person who runs this site for a code.',
+      ),
     error,
     submit,
   );
@@ -127,7 +138,7 @@ function render(mode: Mode, config: PublicConfigResponse): void {
       ? api.register({
           username: username.value,
           password: password.value,
-          ...(config.registrationCodeRequired ? { registrationCode: code.value } : {}),
+          inviteCode: code.value,
         })
       : api.login({ username: username.value, password: password.value });
     request
@@ -141,27 +152,24 @@ function render(mode: Mode, config: PublicConfigResponse): void {
       });
   });
 
-  const switcher =
-    isRegister || config.registrationOpen
-      ? h(
-          'p',
-          { className: 'auth__switch muted' },
-          isRegister ? 'Already have an account? ' : 'New here? ',
-          h('a', {
-            text: isRegister ? 'Sign in' : 'Create an account',
-            attrs: { href: isRegister ? '?mode=login' : '?mode=register' },
-            on: {
-              click: (event) => {
-                event.preventDefault();
-                const target: Mode = isRegister ? 'login' : 'register';
-                params.set('mode', target);
-                window.history.replaceState(null, '', `?${params.toString()}`);
-                render(target, config);
-              },
-            },
-          }),
-        )
-      : null;
+  const switcher = h(
+    'p',
+    { className: 'auth__switch muted' },
+    isRegister ? 'Already have an account? ' : 'Have an invite code? ',
+    h('a', {
+      text: isRegister ? 'Sign in' : 'Create an account',
+      attrs: { href: isRegister ? '?mode=login' : '?mode=register' },
+      on: {
+        click: (event) => {
+          event.preventDefault();
+          const target: Mode = isRegister ? 'login' : 'register';
+          params.set('mode', target);
+          window.history.replaceState(null, '', `?${params.toString()}`);
+          render(target);
+        },
+      },
+    }),
+  );
 
   replaceChildren(
     card,
@@ -178,10 +186,4 @@ function render(mode: Mode, config: PublicConfigResponse): void {
   username.focus();
 }
 
-void api
-  .getConfig()
-  .catch((): PublicConfigResponse => ({ registrationOpen: true, registrationCodeRequired: false }))
-  .then((config) => {
-    const requested = params.get('mode') === 'register' ? 'register' : 'login';
-    render(requested === 'register' && config.registrationOpen ? 'register' : 'login', config);
-  });
+render(params.get('mode') === 'register' ? 'register' : 'login');

@@ -3,7 +3,6 @@ import {
   type AuthUser,
   changePasswordRequestSchema,
   loginRequestSchema,
-  type PublicConfigResponse,
   registerRequestSchema,
 } from '../../shared/protocol.js';
 import { AuthError, type AuthErrorCode, type AuthService } from '../auth/auth-service.js';
@@ -20,8 +19,7 @@ import { parseBody } from './validation.js';
 
 const AUTH_ERROR_STATUS: Readonly<Record<AuthErrorCode, number>> = {
   invalid_credentials: 401,
-  registration_closed: 403,
-  invalid_registration_code: 403,
+  invalid_invite: 403,
   username_taken: 409,
   throttled: 429,
 };
@@ -51,11 +49,6 @@ export function registerAuthRoutes(
   auth: AuthService,
   cookies: CookieSettings,
 ): void {
-  app.get('/api/config', (): PublicConfigResponse => ({
-    registrationOpen: auth.registrationEnabled,
-    registrationCodeRequired: auth.registrationCode !== undefined,
-  }));
-
   app.post(
     '/api/auth/register',
     { config: { rateLimit: { max: 5, timeWindow: '10 minutes' } } },
@@ -66,7 +59,7 @@ export function registerAuthRoutes(
         const { user, sessionToken } = await auth.register(
           body.username,
           body.password,
-          body.registrationCode,
+          body.inviteCode,
         );
         setSessionCookie(reply, sessionToken, cookies);
         return await reply.status(201).send({ user: toAuthUser(user) });

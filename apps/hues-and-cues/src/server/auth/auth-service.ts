@@ -1,5 +1,5 @@
 import type { Logger } from 'pino';
-import { safeEqual } from '../security/tokens.js';
+import type { InviteRepository } from './invite-codes.js';
 import { LoginThrottle } from './login-throttle.js';
 import {
   DEFAULT_SCRYPT_PARAMS,
@@ -17,11 +17,7 @@ import {
 } from './user-repository.js';
 
 export type AuthErrorCode =
-  | 'invalid_credentials'
-  | 'registration_closed'
-  | 'invalid_registration_code'
-  | 'username_taken'
-  | 'throttled';
+  'invalid_credentials' | 'invalid_invite' | 'username_taken' | 'throttled';
 
 export class AuthError extends Error {
   public constructor(
@@ -37,9 +33,10 @@ export class AuthError extends Error {
 export interface AuthServiceOptions {
   readonly users: UserRepository;
   readonly sessions: SessionRepository;
+  readonly invites: InviteRepository;
+  /** Runs `fn` atomically (a database transaction). */
+  readonly transaction: <T>(fn: () => T) => T;
   readonly logger: Logger;
-  readonly registrationEnabled: boolean;
-  readonly registrationCode: string | undefined;
   readonly throttle?: LoginThrottle;
   readonly scryptParams?: ScryptParams;
 }
@@ -59,49 +56,47 @@ export class AuthService {
   private readonly logger: Logger;
   private readonly throttle: LoginThrottle;
   private readonly scryptParams: ScryptParams;
+  private readonly invites: InviteRepository;
+  private readonly transaction: <T>(fn: () => T) => T;
   private dummyHash: Promise<string> | null = null;
-
-  public readonly registrationEnabled: boolean;
-  public readonly registrationCode: string | undefined;
 
   public constructor(options: AuthServiceOptions) {
     this.users = options.users;
     this.sessions = options.sessions;
     this.logger = options.logger.child({ component: 'auth' });
-    this.registrationEnabled = options.registrationEnabled;
-    this.registrationCode = options.registrationCode;
+    this.invites = options.invites;
+    this.transaction = options.transaction;
     this.throttle = options.throttle ?? new LoginThrottle();
     this.scryptParams = options.scryptParams ?? DEFAULT_SCRYPT_PARAMS;
   }
 
+  /** Creates an account, consuming a single-use invite code. */
   public async register(
     username: string,
     password: string,
-    registrationCode: string | undefined,
+    inviteCode: string,
   ): Promise<AuthResult> {
-    if (!this.registrationEnabled) {
-      throw new AuthError('registration_closed', 'Registration is closed on this server.');
-    }
-    if (
-      this.registrationCode !== undefined &&
-      !safeEqual(registrationCode ?? '', this.registrationCode)
-    ) {
-      throw new AuthError('invalid_registration_code', 'Incorrect registration code.');
-    }
-    if (this.users.findByUsername(username)) {
-      throw new AuthError('username_taken', 'That username is already taken.');
-    }
+    // Cheap checks first, so bad codes don't cost a password hash.
+    if (!this.invites.isRedeemable(inviteCode)) throw invalidInvite();
+    if (this.users.findByUsername(username)) throw usernameTaken();
+
     const passwordHash = await hashPassword(password, this.scryptParams);
-    let user: User;
-    try {
-      user = this.users.create(username, passwordHash);
-    } catch (error) {
-      // Lost a race with a concurrent registration for the same name.
-      if (error instanceof UsernameTakenError) {
-        throw new AuthError('username_taken', 'That username is already taken.');
+    // Re-check and consume inside one transaction: the code can only ever
+    // create one account, even under concurrent sign-ups.
+    const user = this.transaction(() => {
+      let created: User;
+      try {
+        created = this.users.create(username, passwordHash);
+      } catch (error) {
+        if (error instanceof UsernameTakenError) throw usernameTaken();
+        throw error;
       }
-      throw error;
-    }
+      if (this.invites.consume(inviteCode, created.id, created.username) !== 'ok') {
+        throw invalidInvite();
+      }
+      this.users.recordLogin(created.id);
+      return created;
+    });
     this.logger.info({ userId: user.id }, 'Account created');
     return { user, sessionToken: this.sessions.create(user.id) };
   }
@@ -170,4 +165,12 @@ export class AuthService {
     this.dummyHash ??= hashPassword('dummy-password-for-timing', this.scryptParams);
     return this.dummyHash;
   }
+}
+
+function invalidInvite(): AuthError {
+  return new AuthError('invalid_invite', 'That invite code is invalid, expired or already used.');
+}
+
+function usernameTaken(): AuthError {
+  return new AuthError('username_taken', 'That username is already taken.');
 }

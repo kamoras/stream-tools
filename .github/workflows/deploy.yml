@@ -162,11 +162,22 @@ jobs:
           ORACLE_USER: ${{ secrets.ORACLE_USER }}
           ORACLE_SSH_KEY: ${{ secrets.ORACLE_SSH_KEY }}
           DOMAIN: ${{ secrets.DOMAIN }}
+          HUES_ADMIN_PASSWORD: ${{ secrets.HUES_ADMIN_PASSWORD }}
+          HUES_ADMIN_PATH: ${{ secrets.HUES_ADMIN_PATH }}
         run: |
           missing=0
           for name in ORACLE_HOST ORACLE_USER ORACLE_SSH_KEY DOMAIN; do
             if [ -z "${!name}" ]; then echo "::error::Secret $name is not set"; missing=1; fi
           done
+          # Hues & Cues refuses to start with only one of the pair.
+          has_password=$([ -n "$HUES_ADMIN_PASSWORD" ] && echo yes || echo no)
+          has_path=$([ -n "$HUES_ADMIN_PATH" ] && echo yes || echo no)
+          if [ "$has_password" != "$has_path" ]; then
+            echo "::error::Set both HUES_ADMIN_PASSWORD and HUES_ADMIN_PATH, or neither"
+            missing=1
+          elif [ -z "$HUES_ADMIN_PASSWORD" ]; then
+            echo "::warning::HUES_ADMIN_PASSWORD/HUES_ADMIN_PATH are not set, so no Hues & Cues invite codes can be generated and nobody can sign up."
+          fi
           exit $missing
 
       - name: Prepare server
@@ -234,8 +245,8 @@ jobs:
             ENVEOF
 
             cat > env/hues-and-cues.env <<'ENVEOF'
-            REGISTRATION_ENABLED=${{ secrets.HUES_REGISTRATION_ENABLED || 'true' }}
-            REGISTRATION_CODE=${{ secrets.HUES_REGISTRATION_CODE }}
+            ADMIN_PASSWORD=${{ secrets.HUES_ADMIN_PASSWORD }}
+            ADMIN_PATH=${{ secrets.HUES_ADMIN_PATH }}
             ALLOWED_CHANNELS=${{ secrets.HUES_ALLOWED_CHANNELS }}
             LOG_LEVEL=info
             ENVEOF

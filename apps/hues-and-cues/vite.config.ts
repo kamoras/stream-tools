@@ -16,6 +16,7 @@ export default defineConfig({
         index: resolve(clientRoot, 'index.html'),
         control: resolve(clientRoot, 'control.html'),
         login: resolve(clientRoot, 'login.html'),
+        admin: resolve(clientRoot, 'admin.html'),
         overlay: resolve(clientRoot, 'overlay.html'),
       },
     },
@@ -28,6 +29,7 @@ export default defineConfig({
       '/healthz': `http://localhost:${devServerPort}`,
       // Server-side auth redirects for these pages.
       '^/(control|login)$': `http://localhost:${devServerPort}`,
+      '^/admin/': `http://localhost:${devServerPort}`,
     },
   },
 });

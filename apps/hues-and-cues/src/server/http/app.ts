@@ -6,10 +6,14 @@ import fastifyStatic from '@fastify/static';
 import fastifyWebsocket from '@fastify/websocket';
 import Fastify, { type FastifyBaseLogger, type FastifyInstance } from 'fastify';
 import type { Logger } from 'pino';
+import type { AdminAuth } from '../admin/admin-auth.js';
 import type { AuthService } from '../auth/auth-service.js';
+import type { InviteRepository } from '../auth/invite-codes.js';
+import type { UserRepository } from '../auth/user-repository.js';
 import type { AppConfig } from '../config.js';
 import type { RoomRegistry } from '../rooms/room-registry.js';
 import type { TwitchChatClient } from '../twitch/chat-client.js';
+import { registerAdminRoutes } from './admin-routes.js';
 import { registerAuthRoutes } from './auth-routes.js';
 import {
   type CookieSettings,
@@ -23,9 +27,19 @@ import { MAX_WS_PAYLOAD_BYTES, registerWsGateway } from './ws-gateway.js';
 export interface AppDependencies {
   readonly config: Pick<
     AppConfig,
-    'allowedChannels' | 'publicDir' | 'trustProxy' | 'env' | 'cookieSecure' | 'sessionTtlMs'
+    | 'allowedChannels'
+    | 'publicDir'
+    | 'trustProxy'
+    | 'env'
+    | 'cookieSecure'
+    | 'sessionTtlMs'
+    | 'admin'
+    | 'inviteTtlMs'
   >;
   readonly auth: AuthService;
+  readonly adminAuth: AdminAuth;
+  readonly invites: InviteRepository;
+  readonly users: UserRepository;
   readonly registry: RoomRegistry;
   readonly chat: Pick<TwitchChatClient, 'acquire' | 'release' | 'connected'>;
   readonly logger: Logger;
@@ -98,6 +112,16 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
   }));
 
   registerAuthRoutes(app, auth, cookies);
+  if (config.admin) {
+    registerAdminRoutes(app, {
+      adminAuth: deps.adminAuth,
+      path: config.admin.path,
+      invites: deps.invites,
+      users: deps.users,
+      inviteTtlMs: config.inviteTtlMs,
+      cookieSecure: config.cookieSecure,
+    });
+  }
   registerRoomRoutes(app, { registry, allowedChannels: config.allowedChannels });
   registerWsGateway(app, { registry, chat, logger: deps.logger });
 
@@ -106,6 +130,8 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
       root: config.publicDir,
       index: false,
       wildcard: true,
+      // The admin page is only reachable through its secret path.
+      allowedPath: (pathName) => pathName !== '/admin.html',
       maxAge: config.env === 'production' ? '1h' : 0,
       setHeaders: (response, filePath) => {
         if (filePath.includes('/assets/')) {

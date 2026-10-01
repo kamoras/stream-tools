@@ -1,3 +1,4 @@
+import type { AdminUserSummary } from '../../shared/protocol.js';
 import type { Db } from '../db/database.js';
 
 export interface User {
@@ -86,6 +87,34 @@ export class UserRepository {
 
   public recordLogin(id: number): void {
     this.db.prepare('UPDATE users SET last_login_at = ? WHERE id = ?').run(this.now(), id);
+  }
+
+  /** Every account with its activity and channels, newest first (admin view). */
+  public listForAdmin(): AdminUserSummary[] {
+    return this.db
+      .prepare<
+        [],
+        {
+          id: number;
+          username: string;
+          created_at: number;
+          last_login_at: number | null;
+          channels: string | null;
+        }
+      >(
+        `SELECT u.id, u.username, u.created_at, u.last_login_at,
+                (SELECT group_concat(r.channel, ',') FROM rooms r WHERE r.owner_id = u.id) AS channels
+           FROM users u
+          ORDER BY u.created_at DESC, u.id DESC`,
+      )
+      .all()
+      .map((row) => ({
+        id: row.id,
+        username: row.username,
+        createdAt: row.created_at,
+        lastLoginAt: row.last_login_at,
+        channels: row.channels === null ? [] : row.channels.split(',').sort(),
+      }));
   }
 
   public count(): number {

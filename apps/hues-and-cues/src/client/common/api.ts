@@ -4,7 +4,6 @@ import type {
   ChangePasswordRequest,
   CreateRoomRequest,
   LoginRequest,
-  PublicConfigResponse,
   RegisterRequest,
   RoomSummary,
 } from '../../shared/protocol.js';
@@ -19,7 +18,7 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   if (init.body !== undefined) headers.set('Content-Type', 'application/json');
   const response = await fetch(path, { ...init, headers, credentials: 'same-origin' });
@@ -35,14 +34,13 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return body as T;
 }
 
-const post = <T>(path: string, body?: unknown): Promise<T> =>
+export const post = <T>(path: string, body?: unknown): Promise<T> =>
   request<T>(path, {
     method: 'POST',
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
 
 export const api = {
-  getConfig: () => request<PublicConfigResponse>('/api/config'),
   me: () => request<{ user: AuthUser }>('/api/auth/me'),
   register: (body: RegisterRequest) => post<{ user: AuthUser }>('/api/auth/register', body),
   login: (body: LoginRequest) => post<{ user: AuthUser }>('/api/auth/login', body),

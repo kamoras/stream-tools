@@ -122,11 +122,14 @@ bot's hostname.
 | Secret                      | Required | Description                                                              |
 | --------------------------- | :------: | ------------------------------------------------------------------------ |
 | `HUES_DOMAIN`               |    ✅¹   | The game's hostname, e.g. `hues.yourdomain.com`                          |
-| `HUES_REGISTRATION_CODE`    |          | Invite code required to create an account (recommended)                  |
-| `HUES_REGISTRATION_ENABLED` |          | `false` to close sign-ups (existing accounts can still sign in)          |
+| `HUES_ADMIN_PASSWORD`       |    ✅²   | Password for the admin page (12+ characters)                             |
+| `HUES_ADMIN_PATH`           |    ✅²   | Secret URL segment, e.g. output of `openssl rand -hex 12`               |
 | `HUES_ALLOWED_CHANNELS`     |          | Comma-separated Twitch channels that may run games                       |
 
 ¹ Without it the game still runs, but is not published.
+² Sign-up is invite-only, and invite codes are generated on the admin page at
+`https://<HUES_DOMAIN>/admin/<HUES_ADMIN_PATH>`, just like the bot's. Without these two secrets
+nobody can create an account. Set both or neither; the deploy fails early if only one is set.
 
 ### 5. Deploy
 
