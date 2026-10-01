@@ -8,6 +8,18 @@ body:
         Thanks for taking the time to report a bug! Please fill out the form below.
         **Never include your Twitch token or any credentials in this form.**
 
+  - type: dropdown
+    id: app
+    attributes:
+      label: Which app?
+      options:
+        - dbd-bot (Dead by Daylight bot)
+        - hues-and-cues (colour-guessing game)
+        - admin (shared admin dashboard)
+        - Hosting / deployment
+    validations:
+      required: true
+
   - type: textarea
     id: description
     attributes:

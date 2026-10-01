@@ -1,0 +1,11 @@
+node_modules/
+.env
+*.log
+.DS_Store
+coverage/
+.nyc_output/
+
+# SQLite database files — persisted on the server, never committed
+data/*.db
+data/*.db-shm
+data/*.db-wal

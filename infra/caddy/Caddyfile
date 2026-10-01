@@ -1,0 +1,4 @@
+# Each app's site lives in its own file. The deploy script copies a site from
+# infra/sites-available into ./sites only when that app's domain is set, so a
+# missing domain never breaks the other apps.
+import /etc/caddy/sites/*.caddy

@@ -2,6 +2,13 @@
 
 <!-- What does this PR do? Why? -->
 
+## App(s) affected
+
+- [ ] dbd-bot
+- [ ] hues-and-cues
+- [ ] admin (shared dashboard)
+- [ ] infra / CI (affects every app)
+
 ## Type of change
 
 - [ ] Bug fix
@@ -12,8 +19,8 @@
 
 ## Testing
 
-- [ ] `npm test` passes
-- [ ] `npm run lint` passes
+- [ ] dbd-bot: `npm test` and `npm run lint` pass
+- [ ] hues-and-cues / admin: `npm run check` passes
 - [ ] Tested manually (describe how below if applicable)
 
 <!-- Describe any manual testing steps -->
