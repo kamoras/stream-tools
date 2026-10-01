@@ -22,15 +22,15 @@ export function pointsForGuess(guess: Coord, target: Coord): number {
  * The cue in the form it is checked in: compatibility forms folded
  * (full-width "ＢＬＵＥ", circled or styled letters, keycap "1️⃣"), invisible
  * characters removed (zero-width spaces, soft hyphens, variation selectors,
- * fillers), accents removed from Latin, Greek and Cyrillic letters and digits
- * ("réd" is "red") and lower-cased. Other scripts keep their marks, which
- * are part of the word there (Japanese "ガラス" is not "カラス").
+ * fillers), accents removed from Latin letters and digits ("réd" is "red")
+ * and lower-cased. Other scripts keep their marks, which are part of the
+ * word there (Japanese "ガラス" is not "カラス", Russian "мой" is not "мои").
  */
 function checkForm(text: string): string {
   return text
     .normalize('NFKD')
     .replace(/\p{Default_Ignorable_Code_Point}/gu, '')
-    .replace(/([\p{Script=Latin}\p{Script=Greek}\p{Script=Cyrillic}\p{N}])\p{M}+/gu, '$1')
+    .replace(/([\p{Script=Latin}\p{N}])\p{M}+/gu, '$1')
     .normalize('NFC')
     .toLowerCase();
 }

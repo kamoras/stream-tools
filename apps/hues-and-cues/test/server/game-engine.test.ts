@@ -100,6 +100,14 @@ describe('GameEngine', () => {
       expect(engine.getHostState().usedCues).toEqual(['ocean', 'deep ocean']);
     });
 
+    it('checks the cue exactly as the control page does', () => {
+      startRound();
+      // U+FEFF is whitespace to JavaScript but an invisible character to the checker.
+      engine.giveClue('sea\ufefffoam');
+      engine.closeGuessing();
+      expect(() => engine.giveClue('r\ufeffed')).toThrow(/Basic colour names/u);
+    });
+
     it('forbids repeating a cue until a new game', () => {
       startRound();
       engine.giveClue('ocean');

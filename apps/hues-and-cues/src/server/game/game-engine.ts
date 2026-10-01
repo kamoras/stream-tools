@@ -172,11 +172,12 @@ export class GameEngine {
       throw new GameError('bad_request', 'The clue cannot be empty.');
     }
     if (this.settings.enforceCueRules) {
-      const violation = cueRuleViolation(clue, clueNumber, this.usedCues);
+      const violation = cueRuleViolation(rawClue, clueNumber, this.usedCues);
       if (violation !== null) throw new GameError('bad_request', violation);
     }
 
-    this.usedCues.add(normalizeCue(clue));
+    // Checked and recorded from the raw text, exactly as the control page checks it.
+    this.usedCues.add(normalizeCue(rawClue));
     round.clues.push(clue);
     round.activeClue = clueNumber;
     round.deadline =

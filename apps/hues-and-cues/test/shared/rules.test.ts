@@ -136,6 +136,7 @@ describe('cueRuleViolation', () => {
     expect(cueRuleViolation('カラス', 1, new Set([normalizeCue('ガラス')]))).toBeNull();
     expect(cueRuleViolation('नल', 1, new Set([normalizeCue('नीला')]))).toBeNull();
     expect(cueRuleViolation('नीला', 1, new Set([normalizeCue('नीला')]))).toMatch(/already given/u);
+    expect(cueRuleViolation('мои', 1, new Set([normalizeCue('мой')]))).toBeNull();
   });
 
   it('treats hyphens, underscores and slashes as word breaks', () => {
