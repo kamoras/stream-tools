@@ -116,7 +116,7 @@ jobs:
       contents: read
       packages: write
     strategy:
-      fail-fast: true
+      fail-fast: false # one app's failed build must not cancel the others
       matrix:
         app: ${{ fromJSON(needs.plan.outputs.apps) }}
     steps:
