@@ -39,6 +39,11 @@ export const gameSettingsSchema = z.object({
   requireGuessCommand: z.boolean(),
   /** Enforce the official cue rules (see `cueRuleViolation` in rules.ts). */
   enforceCueRules: z.boolean(),
+  /**
+   * Count the channel owner's own chat guesses. Off by default: the cue giver
+   * knows the answer. Useful for testing a stream end to end alone.
+   */
+  allowBroadcasterGuesses: z.boolean(),
 });
 export type GameSettings = z.infer<typeof gameSettingsSchema>;
 
@@ -49,6 +54,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   useSecondClue: true,
   requireGuessCommand: false,
   enforceCueRules: true,
+  allowBroadcasterGuesses: false,
 };
 
 export const coordSchema = z.object({

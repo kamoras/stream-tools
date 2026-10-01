@@ -826,6 +826,7 @@ function buildSettings(onChange: (patch: Partial<GameSettings>) => void): Settin
     { key: 'requireGuessCommand', label: 'Require !guess (ignore bare “F12”)' },
     { key: 'oneGuessPerSquare', label: 'One guess per square (official rule)' },
     { key: 'enforceCueRules', label: 'Enforce official cue rules' },
+    { key: 'allowBroadcasterGuesses', label: 'Count my own chat guesses (for testing)' },
   ];
   const checkboxes = toggles.map(({ key, label }) => {
     const input = h('input', { attrs: { type: 'checkbox', id: `setting-${key}` } });

@@ -97,6 +97,14 @@ describe('Room', () => {
     expect(overlay.last?.totalGuesses).toBe(0);
   });
 
+  it("counts the broadcaster's guesses when allowed, for testing", () => {
+    room.execute({ type: 'updateSettings', settings: { allowBroadcasterGuesses: true } });
+    startGuessing();
+    room.handleChat({ ...chat('F12', 'owner'), login: 'Streamer' });
+    vi.advanceTimersByTime(200);
+    expect(overlay.last?.totalGuesses).toBe(1);
+  });
+
   it('resends the current state to an attached client only', () => {
     const before = overlay.states.length;
     room.resendState(overlay);

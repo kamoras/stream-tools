@@ -14,6 +14,7 @@ const storedSettingsSchema = z
     useSecondClue: settingsShape.useSecondClue.optional().catch(undefined),
     requireGuessCommand: settingsShape.requireGuessCommand.optional().catch(undefined),
     enforceCueRules: settingsShape.enforceCueRules.optional().catch(undefined),
+    allowBroadcasterGuesses: settingsShape.allowBroadcasterGuesses.optional().catch(undefined),
   })
   .catch({});
 
