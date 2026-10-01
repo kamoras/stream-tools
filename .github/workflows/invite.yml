@@ -1,17 +1,21 @@
 name: Generate Invite Code (headless)
 
-# Prefer the admin page at https://YOUR_DOMAIN/admin — it's private by design.
-# Use this workflow only when you can't reach the web UI (e.g. server is down
-# during initial setup). The code is masked in logs and stored in the database;
-# retrieve it by SSHing into the server and querying the DB directly.
+# Prefer the dbd-bot admin page at https://YOUR_DOMAIN/admin/YOUR_ADMIN_PATH,
+# which is private by design. Use this workflow only when you can't reach the
+# web UI (e.g. during initial setup). The code is stored in the database and
+# masked in the log; read it back from the admin page or over SSH (below).
 
 on:
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   generate:
     name: Generate invite code on server
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Generate and mask invite code
         uses: appleboy/ssh-action@v1
@@ -20,7 +24,13 @@ jobs:
           username: ${{ secrets.ORACLE_USER }}
           key: ${{ secrets.ORACLE_SSH_KEY }}
           script: |
-            CODE=$(sudo docker exec dbd-bot node scripts/invite.js --raw 2>/dev/null)
+            set -euo pipefail
+            CODE=$(sudo docker exec dbd-bot node scripts/invite.js --raw)
             echo "::add-mask::$CODE"
+            if ! [[ "$CODE" =~ ^[0-9A-F]{4}-[0-9A-F]{4}$ ]]; then
+              echo "Unexpected output from invite.js; no code was confirmed." >&2
+              exit 1
+            fi
             echo "Invite code generated and stored in the database."
-            echo "Retrieve it from https://${{ secrets.DOMAIN }}/admin/${{ secrets.ADMIN_PATH }} or via: sudo docker exec dbd-bot sqlite3 /app/data/bot.db 'SELECT code FROM invite_codes WHERE used=0 ORDER BY id DESC LIMIT 1;'"
+            echo "Read it from https://${{ secrets.DOMAIN }}/admin/${{ secrets.ADMIN_PATH }}, or on the server with:"
+            echo "  sudo docker exec dbd-bot node -e \"const D=require('better-sqlite3');console.log(new D('/app/data/bot.db',{readonly:true}).prepare('SELECT code FROM invite_codes WHERE used=0 ORDER BY id DESC LIMIT 1').get().code)\""

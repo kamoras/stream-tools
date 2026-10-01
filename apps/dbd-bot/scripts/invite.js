@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 
-require('dotenv').config();
+// quiet: dotenv 17 otherwise prints a banner to stdout, corrupting --raw output.
+require('dotenv').config({ quiet: true });
 const crypto = require('crypto');
 const db = require('../src/db');
 
