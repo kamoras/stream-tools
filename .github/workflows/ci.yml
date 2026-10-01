@@ -113,3 +113,23 @@ jobs:
           docker run --rm -v /tmp/caddy:/etc/caddy:ro \
             -e DBD_BOT_DOMAIN=bot.example.com -e HUES_DOMAIN=hues.example.com \
             caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+
+  # One check that passes only when every job above passes. It keeps the
+  # name of the single job the old CI had, which branch protection requires.
+  lint-and-test:
+    needs: [dbd-bot, hues-and-cues, admin, docker, infra]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Require every CI job to pass
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "Job results: $RESULTS"
+          for result in $RESULTS; do
+            if [ "$result" != success ]; then
+              echo "::error::A CI job did not succeed ($result)."
+              exit 1
+            fi
+          done
