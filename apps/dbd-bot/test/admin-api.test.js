@@ -193,6 +193,18 @@ describe('POST /twitch/exchange', () => {
     assert.equal(restarted, false);
   });
 
+  it('accepts a localhost redirect for local development, but no other plain http', async () => {
+    const local = await authed(request(api).post('/twitch/exchange'))
+      .send({ code: 'authcode123', redirectUri: 'http://localhost:8081/admin/local-admin/twitch-callback' });
+    assert.equal(local.status, 204);
+    const remote = await authed(request(api).post('/twitch/exchange'))
+      .send({ code: 'authcode123', redirectUri: 'http://bot.example.com/admin/secret/twitch-callback' });
+    assert.equal(remote.status, 400);
+    const lookalike = await authed(request(api).post('/twitch/exchange'))
+      .send({ code: 'authcode123', redirectUri: 'http://localhost.evil.example/callback' });
+    assert.equal(lookalike.status, 400);
+  });
+
   it('reports a rejected code without restarting', async () => {
     const res = await authed(request(api).post('/twitch/exchange')).send({ code: 'bad', redirectUri });
     assert.equal(res.status, 502);

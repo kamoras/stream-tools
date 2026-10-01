@@ -163,8 +163,11 @@ function createAdminApi({
   app.post('/twitch/exchange', async (req, res) => {
     if (!twitchConfigured) return res.status(404).json({ error: 'Twitch app credentials are not configured' });
     const { code, redirectUri } = req.body || {};
-    if (typeof code !== 'string' || !code || typeof redirectUri !== 'string' || !/^https:\/\//.test(redirectUri)) {
-      return res.status(400).json({ error: 'code and an https redirectUri are required' });
+    // HTTPS, or plain HTTP on localhost (which Twitch allows) for local development.
+    const redirectAllowed = typeof redirectUri === 'string'
+      && /^(?:https:\/\/|http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?\/)/.test(redirectUri);
+    if (typeof code !== 'string' || !code || !redirectAllowed) {
+      return res.status(400).json({ error: 'code and an https (or local) redirectUri are required' });
     }
     try {
       const data = await eventsub.exchangeAuthCode({
