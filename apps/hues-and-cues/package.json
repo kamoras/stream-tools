@@ -1,9 +1,14 @@
 {
-  "name": "hues-and-cues-twitch",
+  "name": "hues-and-cues",
   "version": "1.0.0",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kamoras/stream-tools.git",
+    "directory": "apps/hues-and-cues"
+  },
   "description": "A Hues and Cues style colour-guessing game for Twitch streams, with an OBS browser-source overlay and a streamer control panel.",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "type": "module",
   "engines": {
     "node": ">=22.12.0"

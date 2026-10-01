@@ -1,7 +1,9 @@
 # Dead by Daylight Twitch Bot
 
-[![CI](https://github.com/kamoras/dead-by-daylight-twitch-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/kamoras/dead-by-daylight-twitch-bot/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![CI](https://github.com/kamoras/stream-tools/actions/workflows/ci.yml/badge.svg)](https://github.com/kamoras/stream-tools/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](../../LICENSE)
+
+> Part of [stream-tools](../../README.md). This page covers the bot itself; shared hosting and deployment are in [docs/DEPLOYMENT.md](../../docs/DEPLOYMENT.md).
 
 A Twitch chat bot for Dead by Daylight streamers. Manages a viewer queue for on-stream play sessions and includes DbD-themed commands.
 
@@ -18,8 +20,8 @@ One bot instance serves multiple streamers. Streamers self-onboard through an in
 - **Admin dashboard** — generate/revoke invite codes, monitor connected channels and live presence, manually join/leave, and watch webhook activity
 - **DbD extras** — random killer, survivor, perk, map, and Entity messages
 - **Free hosting** — runs on Oracle Cloud Always Free tier (no expiry; credit card required to sign up)
-- **Auto-deploy** — GitHub Actions builds, pushes, and deploys on every merge to `main`
-- **HTTPS** — Caddy reverse proxy with automatic Let's Encrypt TLS
+- **Auto-deploy** — GitHub Actions builds, pushes, and deploys whenever bot code changes on `main`
+- **HTTPS** — served through the repository's shared Caddy reverse proxy with automatic Let's Encrypt TLS
 
 ---
 
@@ -74,7 +76,7 @@ All configuration is done via environment variables. In production these are set
 | `QUEUE_ROLES_MODE` | | `both` | `off` · `both` · `survivor` · `killer` |
 | `QUEUE_MAX_SIZE` | | `20` | Maximum queue size |
 | `PORT` | | `8080` | Internal port (Caddy proxies to this — do not expose publicly) |
-| `DB_PATH` | | `./data/bot.db` | SQLite path inside the container (maps to `/opt/dbd-bot/data/bot.db` on host) |
+| `DB_PATH` | | `./data/bot.db` | SQLite path inside the container (maps to `/opt/stream-tools/data/dbd-bot/bot.db` on host) |
 | `TWITCH_CLIENT_ID` | | — | Twitch app Client ID — required for live-only presence |
 | `TWITCH_CLIENT_SECRET` | | — | Twitch app Client Secret — required for live-only presence |
 | `TWITCH_WEBHOOK_SECRET` | | — | Random string for EventSub signature verification (`openssl rand -hex 20`); enables instant webhook join/leave on top of polling |
@@ -128,8 +130,8 @@ Requires `TWITCH_CLIENT_ID` and `TWITCH_CLIENT_SECRET` from a [Twitch Developer 
 
 ```bash
 # 1. Clone and install
-git clone https://github.com/kamoras/dead-by-daylight-twitch-bot.git
-cd dead-by-daylight-twitch-bot
+git clone https://github.com/kamoras/stream-tools.git
+cd stream-tools/apps/dbd-bot
 npm install
 
 # 2. Configure
@@ -159,76 +161,15 @@ npm start       # Production start (no auto-reload)
 
 ---
 
-## Deploying to Oracle Cloud Always Free
+## Deployment
 
-### 1 — Provision an Oracle Cloud VM
-
-1. Sign up at [cloud.oracle.com](https://cloud.oracle.com).
-2. Navigate to **Compute → Instances → Create Instance**.
-3. Choose an **Always Free** shape: `VM.Standard.E2.1.Micro` (AMD) or `VM.Standard.A1.Flex` (Arm).
-4. Select **Ubuntu 24 Minimal** as the image.
-5. Add your SSH public key during creation.
-6. Note the **Public IP address** once the instance starts.
-
-#### Open ports
-
-In the Oracle console under **Networking → Virtual Cloud Networks → Security Lists**, add ingress rules for TCP ports **80** and **443**.
-
-Then on the VM:
-
-```bash
-sudo iptables -I INPUT -p tcp --dport 80 -j ACCEPT
-sudo iptables -I INPUT -p tcp --dport 443 -j ACCEPT
-sudo netfilter-persistent save
-```
-
-#### Install Docker
-
-```bash
-sudo apt-get update
-sudo apt-get install -y ca-certificates curl
-sudo install -m 0755 -d /etc/apt/keyrings
-sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
-  -o /etc/apt/keyrings/docker.asc
-echo "deb [arch=$(dpkg --print-architecture) \
-  signed-by=/etc/apt/keyrings/docker.asc] \
-  https://download.docker.com/linux/ubuntu \
-  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
-  | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-sudo apt-get update
-sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
-```
-
-That's the only manual setup required on the VM. Everything else is handled by the deploy workflow.
-
-### 2 — Generate a deploy SSH key pair
-
-On your **local machine**:
-
-```bash
-ssh-keygen -t ed25519 -C "github-actions-deploy" -f ~/.ssh/dbd_deploy -N ""
-```
-
-Add the public key to the Oracle VM:
-
-```bash
-# On the Oracle VM:
-echo "PASTE_CONTENTS_OF_dbd_deploy.pub_HERE" >> ~/.ssh/authorized_keys
-chmod 600 ~/.ssh/authorized_keys
-```
-
-### 3 — Add GitHub Actions secrets
-
-Go to **Settings → Secrets and variables → Actions → Repository secrets** and add:
+The bot is deployed with the rest of [stream-tools](../../README.md) to the shared Oracle Cloud VM. VM setup, how deploys work and troubleshooting are in [docs/DEPLOYMENT.md](../../docs/DEPLOYMENT.md). The bot's own settings are GitHub Actions secrets:
 
 | Secret | Required | Description |
 |--------|:--------:|-------------|
-| `ORACLE_HOST` | ✅ | Oracle VM public IP or hostname |
-| `ORACLE_USER` | ✅ | SSH username (`ubuntu`) |
-| `ORACLE_SSH_KEY` | ✅ | Contents of `~/.ssh/dbd_deploy` (the **private** key) |
 | `TWITCH_BOT_USERNAME` | ✅ | Bot's Twitch username |
 | `TWITCH_BOT_TOKEN` | ✅ | Bot's OAuth token (`oauth:...`) |
-| `DOMAIN` | ✅ | Your domain (e.g. `bot.yourdomain.com`) |
+| `DOMAIN` | ✅ | The bot's domain (e.g. `bot.yourdomain.com`) |
 | `ADMIN_PASSWORD` | ✅ | Password for the admin dashboard |
 | `ADMIN_PATH` | ✅ | Secret URL segment for the admin dashboard |
 | `QUEUE_ROLES_MODE` | | Defaults to `both` |
@@ -238,45 +179,20 @@ Go to **Settings → Secrets and variables → Actions → Repository secrets** 
 | `TWITCH_CLIENT_SECRET` | | Enables stream-end auto-detection via EventSub |
 | `TWITCH_WEBHOOK_SECRET` | | Random string — generate with `openssl rand -hex 20` |
 
-### 4 — Deploy
-
-Push a commit to `main`. GitHub Actions will:
-
-1. Run lint and tests (CI).
-2. Build a multi-arch Docker image and push it to `ghcr.io/kamoras/dead-by-daylight-twitch-bot:latest`.
-3. SSH into the Oracle VM, create `/opt/dbd-bot`, write `.env` from secrets, copy `docker-compose.yml` and `Caddyfile`, then start the containers.
-
-Caddy automatically obtains a Let's Encrypt TLS certificate on first start. Your landing page will be live at `https://YOUR_DOMAIN`.
-
-Monitor the deploy under **Actions** in your repository. To tail logs on the server:
+On the server the bot runs as the `dbd-bot` container. Its SQLite database is at `/opt/stream-tools/data/dbd-bot/bot.db` and persists across deploys. To tail logs or back it up:
 
 ```bash
-sudo docker compose -f /opt/dbd-bot/docker-compose.yml logs -f
+sudo docker logs -f dbd-bot
+sudo sqlite3 /opt/stream-tools/data/dbd-bot/bot.db ".backup /tmp/dbd-bot-backup.db"
 ```
 
-The SQLite database is at `/opt/dbd-bot/data/bot.db` on the host — it persists across container recreation. To back it up:
-
-```bash
-cp /opt/dbd-bot/data/bot.db ~/dbd-bot-backup.db
-```
-
-### 5 — Onboard a channel
+### Onboard a channel
 
 1. Visit `https://YOUR_DOMAIN/admin/YOUR_ADMIN_PATH` and sign in.
 2. Click **Generate Code** — the code is shown only to you, never in any log.
 3. Share the code with the streamer.
 4. They visit `https://YOUR_DOMAIN`, enter the code and their channel name.
 5. Recommended: they type `/mod YOUR_BOT_USERNAME` in their chat to give the bot moderator status (prevents Twitch rate-limiting the bot's messages).
-
-### Hosting other apps on the same VM
-
-Caddy owns ports 80/443, so other projects on this VM are served through it rather than running their own proxy:
-
-- The deploy workflow creates a shared Docker network named `edge` and the directory `/opt/caddy/sites`.
-- Caddy joins `edge` and imports every `/opt/caddy/sites/*.caddy` file.
-- Another app attaches its container to `edge`, writes a site file such as `hues.example.com { reverse_proxy my-app:8080 }` into `/opt/caddy/sites`, then reloads Caddy with `sudo docker exec dbd-caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile`.
-
-[Hues & Cues](https://github.com/kamoras/hues-and-cues-twitch) is deployed this way. With no site files present, Caddy just logs a warning and serves the bot as before.
 
 ---
 
@@ -310,17 +226,7 @@ Without any Twitch credentials, the bot can't tell who's live and falls back to 
 
 ## GitHub Actions Workflows
 
-| Workflow | Trigger | What it does |
-|----------|---------|--------------|
-| `ci.yml` | Push to `main`, any PR | Lints and runs tests |
-| `deploy.yml` | After CI passes on `main`, or manual | Builds image → pushes to ghcr.io → writes config → deploys via SSH |
-| `invite.yml` | Manual only | Emergency headless fallback — generates a code on the server. Use the admin dashboard instead; the Actions log never shows the code. |
-
----
-
-## Dependabot
-
-Dependabot opens weekly PRs for npm packages, GitHub Actions, and the Docker base image, all grouped to minimise noise. CI runs automatically on each PR.
+CI and deployment are shared across the repository; see the [root README](../../README.md#ci-and-deployment). `invite.yml` (manual only) is a bot-specific emergency fallback that generates an invite code on the server — use the admin dashboard instead; the Actions log never shows the code.
 
 ---
 
@@ -332,10 +238,10 @@ Killers, survivors, perks, and maps live in `src/data/` and are community-mainta
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions, coding standards, commit conventions, and the PR process.
+See [CONTRIBUTING.md](../../CONTRIBUTING.md) for setup instructions, coding standards, commit conventions, and the PR process.
 
 ---
 
 ## License
 
-[MIT](LICENSE) — free to use, modify, and distribute.
+[MIT](../../LICENSE) — free to use, modify, and distribute.

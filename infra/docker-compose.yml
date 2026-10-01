@@ -1,0 +1,71 @@
+# Production stack for every stream-tools app on the Oracle VM.
+#
+# Deployed to /opt/stream-tools by .github/workflows/deploy.yml; see
+# docs/DEPLOYMENT.md. Caddy is the only service with published ports and
+# routes each hostname to its app. Secrets live in env/*.env on the server
+# (written from GitHub Actions secrets) and app data in data/<app>/.
+# IMAGE_REGISTRY overrides where app images come from (default: GHCR).
+name: stream-tools
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: '3'
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: caddy
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    env_file: env/caddy.env
+    volumes:
+      # Mount the directory, not the file: deploys replace files, and a
+      # single-file bind mount would keep pointing at the old copy.
+      - ./caddy:/etc/caddy:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    logging: *logging
+
+  dbd-bot:
+    image: ${IMAGE_REGISTRY:-ghcr.io/kamoras/stream-tools}/dbd-bot:latest
+    container_name: dbd-bot
+    restart: unless-stopped
+    env_file: env/dbd-bot.env
+    volumes:
+      - ./data/dbd-bot:/app/data
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://localhost:8080/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging: *logging
+
+  hues-and-cues:
+    image: ${IMAGE_REGISTRY:-ghcr.io/kamoras/stream-tools}/hues-and-cues:latest
+    container_name: hues-and-cues
+    restart: unless-stopped
+    env_file: env/hues-and-cues.env
+    environment:
+      TRUST_PROXY: 'true'
+    volumes:
+      - ./data/hues-and-cues:/data
+    logging: *logging
+
+volumes:
+  # Fixed names so certificates survive changes to the compose project.
+  caddy-data:
+    name: stream-tools-caddy-data
+  caddy-config:
+    name: stream-tools-caddy-config

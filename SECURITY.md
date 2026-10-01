@@ -4,7 +4,7 @@
 
 **Please do not report security vulnerabilities through public GitHub issues.**
 
-Use GitHub's [private vulnerability reporting](https://github.com/kamoras/dead-by-daylight-twitch-bot/security/advisories/new) feature instead. This keeps the details confidential until a fix is available.
+Use GitHub's [private vulnerability reporting](https://github.com/kamoras/stream-tools/security/advisories/new) feature instead. This keeps the details confidential until a fix is available.
 
 Please include:
 

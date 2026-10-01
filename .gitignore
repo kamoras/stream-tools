@@ -1,0 +1,4 @@
+# Secrets and local state never belong in git.
+infra/env/
+node_modules/
+.DS_Store

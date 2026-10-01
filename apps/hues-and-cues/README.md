@@ -83,11 +83,10 @@ To restrict who can sign up, set `REGISTRATION_CODE` (an invite code) or `REGIST
 
 ## Deployment
 
-Production runs on the same Oracle Cloud VM as
-[dead-by-daylight-twitch-bot](https://github.com/kamoras/dead-by-daylight-twitch-bot). It sits behind
-that project's Caddy and is deployed by GitHub Actions on every merge to `main`. See
-[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the one-time setup (DNS record and repository secrets)
-and operations.
+Hues & Cues is part of [stream-tools](../../README.md) and is deployed with the other apps to the
+shared Oracle Cloud VM whenever its code changes on `main`. See
+[docs/DEPLOYMENT.md](../../docs/DEPLOYMENT.md) for setup, secrets (`HUES_DOMAIN`,
+`HUES_REGISTRATION_CODE`, …) and operations.
 
 A long-running server is required: the app holds a WebSocket connection to Twitch chat and pushes
 live updates to the overlay, which serverless platforms such as Vercel cannot do.
@@ -130,7 +129,6 @@ src/
              Twitch chat client, SQLite persistence
   client/    Landing, sign-in, control panel and overlay pages (Vite, TypeScript, no framework)
 test/        Vitest unit and integration tests
-deploy/      Production compose file, Caddy site, standalone Caddyfile and systemd unit
 ```
 
 _Hues and Cues_ is a trademark of The Op Games. This is an unofficial fan project and is not

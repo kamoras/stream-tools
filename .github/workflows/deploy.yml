@@ -1,102 +1,224 @@
 name: Deploy
 
-on:
-  # Only runs after CI passes on main — ensures broken code is never deployed.
-  workflow_run:
-    workflows: ["CI"]
-    types: [completed]
-    branches: [main]
+# Every push to main is tested (ci.yml), then only the apps whose code changed
+# are rebuilt and restarted on the Oracle VM. Infrastructure-only changes
+# (infra/) re-apply configuration without restarting any app.
+# See docs/DEPLOYMENT.md.
 
-  # Allow manual redeploy from the Actions tab.
+on:
+  push:
+    branches: [main]
   workflow_dispatch:
+    inputs:
+      apps:
+        description: 'Apps to rebuild and restart: "all", "none" (config only), or a comma-separated list such as "dbd-bot"'
+        required: true
+        default: none
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  KNOWN_APPS: '["dbd-bot","hues-and-cues"]'
 
 jobs:
-  build-and-push:
-    name: Build & push image
+  ci:
+    name: CI
+    uses: ./.github/workflows/ci.yml
+
+  plan:
+    name: Plan
     runs-on: ubuntu-latest
-    if: >
-      github.event_name == 'workflow_dispatch' ||
-      github.event.workflow_run.conclusion == 'success'
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      apps: ${{ steps.plan.outputs.apps }}
+      deploy: ${{ steps.plan.outputs.deploy }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      # Diff against the last successful deploy rather than the previous push:
+      # queued runs can be superseded, and their changes must not be lost.
+      - id: base
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow deploy.yml --branch main \
+            --event push --status success --limit 1 --json headSha --jq '.[0].headSha // ""')
+          if [ -n "$sha" ] && git cat-file -e "$sha^{commit}" 2>/dev/null; then
+            echo "Last successful deploy: $sha"
+            echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          else
+            echo "No previous successful deploy found; deploying every app."
+            echo "first=true" >> "$GITHUB_OUTPUT"
+          fi
+      - id: changes
+        if: github.event_name == 'push' && steps.base.outputs.sha != ''
+        uses: dorny/paths-filter@v4
+        with:
+          base: ${{ steps.base.outputs.sha }}
+          filters: |
+            dbd-bot: apps/dbd-bot/**
+            hues-and-cues: apps/hues-and-cues/**
+            infra: [infra/**, .github/workflows/deploy.yml]
+      - id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT: ${{ inputs.apps }}
+          FIRST: ${{ steps.base.outputs.first }}
+          CHANGES: ${{ steps.changes.outputs.changes || '[]' }}
+        run: |
+          if [ "$FIRST" = true ]; then
+            apps="$KNOWN_APPS"
+            deploy=true
+          elif [ "$EVENT" = workflow_dispatch ]; then
+            case "$INPUT" in
+              all) apps="$KNOWN_APPS" ;;
+              none | '') apps='[]' ;;
+              *) apps=$(jq -cn --arg s "$INPUT" '$s | split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(. != ""))') ;;
+            esac
+            unknown=$(jq -cn --argjson a "$apps" --argjson k "$KNOWN_APPS" '$a - $k')
+            if [ "$unknown" != '[]' ]; then echo "::error::Unknown apps: $unknown"; exit 1; fi
+            deploy=true
+          else
+            apps=$(jq -cn --argjson c "$CHANGES" --argjson k "$KNOWN_APPS" '[$c[] | select(. as $x | $k | index($x))]')
+            deploy=$([ "$CHANGES" != '[]' ] && echo true || echo false)
+          fi
+          echo "apps=$apps" >> "$GITHUB_OUTPUT"
+          echo "deploy=$deploy" >> "$GITHUB_OUTPUT"
+          echo "### Deploy plan" >> "$GITHUB_STEP_SUMMARY"
+          echo "Deploy: **$deploy** · Apps to rebuild: \`$apps\`" >> "$GITHUB_STEP_SUMMARY"
+
+  build:
+    name: Build ${{ matrix.app }}
+    needs: [ci, plan]
+    if: needs.plan.outputs.apps != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
       packages: write
-
-    outputs:
-      image: ${{ steps.meta.outputs.tags }}
-
+    strategy:
+      fail-fast: true
+      matrix:
+        app: ${{ fromJSON(needs.plan.outputs.apps) }}
     steps:
-      - uses: actions/checkout@v6
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v4
+      - uses: actions/checkout@v7
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Extract image metadata
-        id: meta
+      # The Always Free VM may be Arm (A1) or x86 (E2), so build both.
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+      - id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ghcr.io/${{ github.repository }}
+          images: ghcr.io/${{ github.repository }}/${{ matrix.app }}
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest
             type=sha,prefix=sha-
-
-      - name: Build and push
-        uses: docker/build-push-action@v6
+          labels: |
+            org.opencontainers.image.title=${{ matrix.app }}
+      - uses: docker/build-push-action@v7
         with:
-          context: .
+          context: apps/${{ matrix.app }}
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,scope=${{ matrix.app }},mode=max
 
   deploy:
     name: Deploy to Oracle Cloud
+    needs: [ci, plan, build]
+    # Run after a successful build, or with no build when only config changed.
+    if: >
+      always() &&
+      needs.ci.result == 'success' &&
+      needs.plan.outputs.deploy == 'true' &&
+      (needs.build.result == 'success' || needs.build.result == 'skipped')
     runs-on: ubuntu-latest
-    needs: build-and-push
-    concurrency: deploy-production
-
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: read
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
-      - name: Create app directory on server
+      - name: Check required secrets
+        env:
+          ORACLE_HOST: ${{ secrets.ORACLE_HOST }}
+          ORACLE_USER: ${{ secrets.ORACLE_USER }}
+          ORACLE_SSH_KEY: ${{ secrets.ORACLE_SSH_KEY }}
+          DOMAIN: ${{ secrets.DOMAIN }}
+        run: |
+          missing=0
+          for name in ORACLE_HOST ORACLE_USER ORACLE_SSH_KEY DOMAIN; do
+            if [ -z "${!name}" ]; then echo "::error::Secret $name is not set"; missing=1; fi
+          done
+          exit $missing
+
+      - name: Prepare server
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.ORACLE_HOST }}
           username: ${{ secrets.ORACLE_USER }}
           key: ${{ secrets.ORACLE_SSH_KEY }}
           script: |
+            set -eu
             sudo systemctl enable docker
-            sudo mkdir -p /opt/dbd-bot/data /opt/caddy/sites
-            sudo chown -R $USER:$USER /opt/dbd-bot
-            sudo chown -R 1000:1000 /opt/dbd-bot/data
-            # Shared network/site directory so other apps on this VM can sit behind Caddy.
-            sudo docker network inspect edge >/dev/null 2>&1 || sudo docker network create edge
+            sudo mkdir -p /opt/stream-tools
+            sudo chown "$USER:$USER" /opt/stream-tools
+            # Replace managed files wholesale so removed ones don't linger.
+            # (env/ and data/ are never touched here.)
+            rm -rf /opt/stream-tools/scripts /opt/stream-tools/sites-available
 
-      - name: Copy config files to server
+      - name: Copy infrastructure files
         uses: appleboy/scp-action@v1.0.0
         with:
           host: ${{ secrets.ORACLE_HOST }}
           username: ${{ secrets.ORACLE_USER }}
           key: ${{ secrets.ORACLE_SSH_KEY }}
-          source: docker-compose.yml,Caddyfile
-          target: /opt/dbd-bot/
+          source: infra/docker-compose.yml,infra/caddy/Caddyfile,infra/sites-available,infra/scripts
+          target: /opt/stream-tools
+          strip_components: 1
 
-      - name: Write .env and deploy
+      - name: Write configuration and deploy
         uses: appleboy/ssh-action@v1
+        env:
+          APPS: ${{ join(fromJSON(needs.plan.outputs.apps), ' ') }}
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           host: ${{ secrets.ORACLE_HOST }}
           username: ${{ secrets.ORACLE_USER }}
           key: ${{ secrets.ORACLE_SSH_KEY }}
+          envs: APPS,GHCR_USER,GHCR_TOKEN
+          command_timeout: 15m
           script: |
-            cat > /opt/dbd-bot/.env <<'ENVEOF'
+            set -eu
+            cd /opt/stream-tools
+            mkdir -p env
+            chmod 700 env
+            umask 077
+
+            cat > env/caddy.env <<'ENVEOF'
+            DBD_BOT_DOMAIN=${{ secrets.DOMAIN }}
+            HUES_DOMAIN=${{ secrets.HUES_DOMAIN }}
+            ENVEOF
+
+            cat > env/dbd-bot.env <<'ENVEOF'
             TWITCH_BOT_USERNAME=${{ secrets.TWITCH_BOT_USERNAME }}
             TWITCH_BOT_TOKEN=${{ secrets.TWITCH_BOT_TOKEN }}
             QUEUE_ROLES_MODE=${{ secrets.QUEUE_ROLES_MODE || 'both' }}
@@ -110,7 +232,41 @@ jobs:
             TWITCH_CLIENT_SECRET=${{ secrets.TWITCH_CLIENT_SECRET }}
             TWITCH_WEBHOOK_SECRET=${{ secrets.TWITCH_WEBHOOK_SECRET }}
             ENVEOF
-            cd /opt/dbd-bot
-            sudo docker compose pull
-            sudo docker compose up -d --remove-orphans
-            sudo docker image prune -f
+
+            cat > env/hues-and-cues.env <<'ENVEOF'
+            REGISTRATION_ENABLED=${{ secrets.HUES_REGISTRATION_ENABLED || 'true' }}
+            REGISTRATION_CODE=${{ secrets.HUES_REGISTRATION_CODE }}
+            ALLOWED_CHANNELS=${{ secrets.HUES_ALLOWED_CHANNELS }}
+            LOG_LEVEL=info
+            ENVEOF
+            # Drop unset optional settings so the app's defaults apply.
+            sed -i -E '/^[A-Z_]+=$/d' env/hues-and-cues.env
+
+            # Short-lived login so pulls work whatever the package visibility.
+            echo "$GHCR_TOKEN" | sudo docker login ghcr.io -u "$GHCR_USER" --password-stdin >/dev/null
+            trap 'sudo docker logout ghcr.io >/dev/null' EXIT
+            # shellcheck disable=SC2086 # APPS is a space-separated list
+            sudo bash scripts/deploy.sh $APPS
+
+      - name: Smoke test
+        env:
+          DBD_BOT_DOMAIN: ${{ secrets.DOMAIN }}
+          HUES_DOMAIN: ${{ secrets.HUES_DOMAIN }}
+        run: |
+          check() {
+            for attempt in $(seq 1 12); do
+              if curl -fsS --max-time 10 -o /dev/null "$1"; then echo "✓ $1"; return 0; fi
+              echo "Attempt $attempt for $1 failed; retrying in 10s"
+              sleep 10
+            done
+            echo "::error::$1 did not respond. See docs/DEPLOYMENT.md#troubleshooting"
+            return 1
+          }
+          status=0
+          check "https://$DBD_BOT_DOMAIN/health" || status=1
+          if [ -n "$HUES_DOMAIN" ]; then
+            check "https://$HUES_DOMAIN/healthz" || status=1
+          else
+            echo "::notice::HUES_DOMAIN is not set, so Hues & Cues is running but not published."
+          fi
+          exit $status

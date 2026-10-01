@@ -1,27 +1,36 @@
 version: 2
 updates:
-  - package-ecosystem: "npm"
-    directory: "/"
+  - package-ecosystem: npm
+    directories:
+      - /apps/dbd-bot
+      - /apps/hues-and-cues
     schedule:
-      interval: "weekly"
+      interval: weekly
     open-pull-requests-limit: 5
     groups:
-      all-npm-dependencies:
+      npm-dependencies:
         patterns:
-          - "*"
+          - '*'
 
-  - package-ecosystem: "github-actions"
-    directory: "/"
+  - package-ecosystem: docker
+    directories:
+      - /apps/dbd-bot
+      - /apps/hues-and-cues
     schedule:
-      interval: "weekly"
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: docker-compose
+    directory: /infra
+    schedule:
+      interval: monthly
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
     open-pull-requests-limit: 5
     groups:
       github-actions:
         patterns:
-          - "*"
-
-  - package-ecosystem: "docker"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 5
+          - '*'

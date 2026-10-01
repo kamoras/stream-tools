@@ -221,7 +221,7 @@ function renderPage({ title, heading, headingColor = '#cc2222', body, botName, b
   <footer>
     Built by <a href="https://github.com/kamoras" target="_blank" rel="noopener">kamoras</a>
     &nbsp;·&nbsp;
-    <a href="https://github.com/kamoras/dead-by-daylight-twitch-bot" target="_blank" rel="noopener">Open source on GitHub</a>
+    <a href="https://github.com/kamoras/stream-tools/tree/main/apps/dbd-bot" target="_blank" rel="noopener">Open source on GitHub</a>
   </footer>
 </body>
 </html>`;

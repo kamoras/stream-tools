@@ -1,27 +1,94 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
-    branches: [main]
+  # Called by deploy.yml so main is always tested before it is deployed.
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  lint-and-test:
+  dbd-bot:
+    name: dbd-bot · lint & test
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: apps/dbd-bot
     steps:
-      - uses: actions/checkout@v6
-
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: '20'
-          cache: 'npm'
+          cache: npm
+          cache-dependency-path: apps/dbd-bot/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
 
-      - name: Install dependencies
-        run: npm ci
+  hues-and-cues:
+    name: hues-and-cues · lint, typecheck, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: apps/hues-and-cues
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: apps/hues-and-cues/.nvmrc
+          cache: npm
+          cache-dependency-path: apps/hues-and-cues/package-lock.json
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test:coverage
+      - run: npm run build
 
-      - name: Lint
-        run: npm run lint
+  docker:
+    name: ${{ matrix.app }} · image builds
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [dbd-bot, hues-and-cues]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
+        with:
+          context: apps/${{ matrix.app }}
+          push: false
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,scope=${{ matrix.app }},mode=max
 
-      - name: Test
-        run: npm test
+  infra:
+    name: infra · validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - name: ShellCheck
+        run: shellcheck -x -P SCRIPTDIR infra/scripts/*.sh
+      - name: Compose file
+        working-directory: infra
+        run: |
+          mkdir -p env
+          for f in caddy dbd-bot hues-and-cues; do touch "env/$f.env"; done
+          docker compose config --quiet
+      - name: Caddy config
+        run: |
+          mkdir -p /tmp/caddy/sites
+          cp infra/caddy/Caddyfile /tmp/caddy/
+          cp infra/sites-available/*.caddy /tmp/caddy/sites/
+          docker run --rm -v /tmp/caddy:/etc/caddy:ro \
+            -e DBD_BOT_DOMAIN=bot.example.com -e HUES_DOMAIN=hues.example.com \
+            caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
