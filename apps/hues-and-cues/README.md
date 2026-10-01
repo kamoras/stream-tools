@@ -46,7 +46,8 @@ players.
 
 1. **Draw a card.** Four colours appear, visible only to you. Pick one in secret.
 2. **Give a one-word cue.** Guessing opens on stream, and chat types coordinates such as `F12`.
-   Each chatter places one guess. Your own messages don't count, since you know the answer.
+   Each chatter places one guess. Your own messages don't count, since you know the answer
+   (turn on "Count my own chat guesses" to test alone).
 3. **Give a second cue** of one or two words when guessing closes, for a second guess. Or skip it
    and reveal straight away, as the rules allow.
 4. **Reveal.** The target and the scoring frame appear on the board.
@@ -119,6 +120,7 @@ earn one point for every guess inside the scoring frame. With one guess per squa
 | Require `!guess`                | off     | Ignore bare `F12` messages; only `!guess F12` counts                        |
 | One guess per square            | on      | Official rule; turn off for very large chats                                |
 | Enforce official cue rules      | on      | Word limits, no basic colours, no board positions, no repeats               |
+| Count my own chat guesses       | off     | Counts the channel owner's guesses, for testing alone (not official)        |
 
 Accepted chat formats: `F12`, `f12`, `F 12`, `F-12`, `12F`, `!guess F12`, `!g F12`, `!hue F12`.
 

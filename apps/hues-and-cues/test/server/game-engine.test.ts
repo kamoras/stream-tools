@@ -389,6 +389,7 @@ describe('GameEngine', () => {
         useSecondClue: false,
         requireGuessCommand: false,
         enforceCueRules: true,
+        allowBroadcasterGuesses: false,
       });
     });
   });

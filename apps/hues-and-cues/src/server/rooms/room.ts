@@ -150,8 +150,14 @@ export class Room {
   /** Feeds a chat message from this room's channel into the game. */
   public handleChat(message: ChatMessage): void {
     if (this.engine.currentPhase !== 'guessing') return;
-    // The broadcaster can see the target on the control page, so their guesses don't count.
-    if (message.login.toLowerCase() === this.channel.toLowerCase()) return;
+    // The broadcaster can see the target on the control page, so their guesses
+    // don't count, unless the host turned that on for testing.
+    if (
+      !this.engine.currentSettings.allowBroadcasterGuesses &&
+      message.login.toLowerCase() === this.channel.toLowerCase()
+    ) {
+      return;
+    }
     const coord = parseChatGuess(message.text, this.engine.currentSettings.requireGuessCommand);
     if (coord === null) return;
     this.recordGuess(
