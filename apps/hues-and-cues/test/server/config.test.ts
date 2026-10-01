@@ -10,7 +10,7 @@ describe('loadConfig', () => {
       env: 'development',
       host: '0.0.0.0',
       port: 8080,
-      admin: undefined,
+      internalApi: undefined,
       inviteTtlMs: 14 * DAY,
       allowedChannels: undefined,
       trustProxy: false,
@@ -27,8 +27,8 @@ describe('loadConfig', () => {
     const config = loadConfig({
       NODE_ENV: 'production',
       PORT: '3000',
-      ADMIN_PASSWORD: 'a long admin password',
-      ADMIN_PATH: 'secret-path_1',
+      INTERNAL_API_TOKEN: 'x'.repeat(40),
+      INTERNAL_API_PORT: '9100',
       INVITE_TTL_DAYS: '3',
       ALLOWED_CHANNELS: ' #One, two ,,',
       TRUST_PROXY: 'true',
@@ -37,7 +37,7 @@ describe('loadConfig', () => {
     expect(config).toMatchObject({
       env: 'production',
       port: 3000,
-      admin: { password: 'a long admin password', path: 'secret-path_1' },
+      internalApi: { token: 'x'.repeat(40), port: 9100 },
       inviteTtlMs: 3 * DAY,
       allowedChannels: ['one', 'two'],
       trustProxy: true,
@@ -51,15 +51,8 @@ describe('loadConfig', () => {
     expect(loadConfig({ COOKIE_SECURE: 'true' }).cookieSecure).toBe(true);
   });
 
-  it('requires ADMIN_PASSWORD and ADMIN_PATH together, and validates them', () => {
-    expect(() => loadConfig({ ADMIN_PASSWORD: 'a long admin password' })).toThrow(/set together/u);
-    expect(() => loadConfig({ ADMIN_PATH: 'secret-path' })).toThrow(/set together/u);
-    expect(() => loadConfig({ ADMIN_PASSWORD: 'short', ADMIN_PATH: 'secret-path' })).toThrow(
-      /ADMIN_PASSWORD/u,
-    );
-    expect(() =>
-      loadConfig({ ADMIN_PASSWORD: 'a long admin password', ADMIN_PATH: 'has/slash' }),
-    ).toThrow(/ADMIN_PATH/u);
+  it('rejects a short internal API token', () => {
+    expect(() => loadConfig({ INTERNAL_API_TOKEN: 'short' })).toThrow(/INTERNAL_API_TOKEN/u);
   });
 
   it('treats an empty channel list as unrestricted', () => {

@@ -36,7 +36,7 @@ export const MIGRATIONS: readonly string[] = [
   ) STRICT;
   `,
 
-  /* 2: single-use invite codes and admin sessions */ `
+  /* 2: single-use invite codes */ `
   CREATE TABLE invite_codes (
     id               INTEGER PRIMARY KEY,
     code_hash        TEXT    NOT NULL UNIQUE,
@@ -49,12 +49,5 @@ export const MIGRATIONS: readonly string[] = [
     used_by_user_id  INTEGER REFERENCES users (id) ON DELETE SET NULL,
     used_by_username TEXT
   ) STRICT;
-
-  CREATE TABLE admin_sessions (
-    token_hash TEXT    PRIMARY KEY,
-    created_at INTEGER NOT NULL,
-    expires_at INTEGER NOT NULL
-  ) STRICT;
-  CREATE INDEX admin_sessions_expires_at ON admin_sessions (expires_at);
   `,
 ];

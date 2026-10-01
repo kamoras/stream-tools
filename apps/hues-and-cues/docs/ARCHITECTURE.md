@@ -61,11 +61,11 @@ may run games.
 **Invite-only sign-up and admin.** Registration requires a single-use invite code, as in the
 dbd-bot. Codes have 60 bits of entropy and are stored only as SHA-256 hashes with a short display
 hint. Creating the account and consuming the code happen in one SQLite transaction, with a
-conditional `UPDATE`, so a code can never create two accounts even under concurrent sign-ups. Codes
-are generated on an admin page under the secret `/admin/<ADMIN_PATH>` prefix (everything else under
-`/admin` is a 404). The admin signs in with `ADMIN_PASSWORD`, compared in constant time and
-throttled, and gets an 8-hour server-side session in its own `SameSite=Strict` cookie. Admin access
-is never tied to a user account, so registering a particular username can't grant it.
+conditional `UPDATE`, so a code can never create two accounts even under concurrent sign-ups. This
+app has no admin UI. The shared stream-tools dashboard (`apps/admin`) generates and revokes codes
+and lists accounts through an internal JSON API, which runs as a separate server on
+`INTERNAL_API_PORT`. That port is never routed by the reverse proxy, and every request must carry
+`INTERNAL_API_TOKEN` (compared in constant time).
 
 **Back-pressure.** Popular channels can produce hundreds of guesses per second. Guess broadcasts are
 coalesced (at most four per second per room), the public state carries a capped list of recent

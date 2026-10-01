@@ -79,27 +79,27 @@ Accepted chat formats: `F12`, `f12`, `F 12`, `F-12`, `12F`, `!guess F12`, `!g F1
 - Each account can run games for up to 5 channels. Only the owner can control a game; its overlay
   link is public and read-only so OBS needs no sign-in.
 
-### Invite-only sign-up and the admin page
+### Invite-only sign-up
 
-Sign-up works like the dbd-bot's: it is invite-only, and invite codes come from an admin page.
+Sign-up works like the dbd-bot's: it is invite-only. Invite codes come from the shared
+[stream-tools admin dashboard](../admin/README.md), the same login as the bot's.
 
-1. Set `ADMIN_PASSWORD` and `ADMIN_PATH`. The admin page is then at `/admin/<ADMIN_PATH>`. Any other
-   `/admin/*` URL returns 404, and with neither set the admin area doesn't exist.
-2. Sign in with the admin password and click **Generate Code**, optionally noting who it's for.
-   Copy the code (`XXXX-XXXX-XXXX`) and send it to the streamer. It is shown only once; only a hash
-   is stored.
-3. The streamer enters it when creating their account. Each code works **once** and expires after
+1. In the dashboard's **Hues & Cues** section, click **Generate Code**, optionally noting who it's
+   for. Copy the code (`XXXX-XXXX-XXXX`) and send it to the streamer. It is shown only once; only a
+   hash is stored.
+2. The streamer enters it when creating their account. Each code works **once** and expires after
    14 days (`INVITE_TTL_DAYS`). Unused codes can be revoked.
 
-The admin page also lists every account with its sign-up date, last sign-in and channels. Admin
-sessions last 8 hours and are separate from user accounts.
+The dashboard also lists every account with its sign-up date, last sign-in and channels. It talks to
+this app through a small internal API (`src/server/http/internal-api.ts`) on `INTERNAL_API_PORT`.
+That port is never exposed publicly, and every request needs the shared `INTERNAL_API_TOKEN`.
 
 ## Deployment
 
 Hues & Cues is part of [stream-tools](../../README.md) and is deployed with the other apps to the
 shared Oracle Cloud VM whenever its code changes on `main`. See
 [docs/DEPLOYMENT.md](../../docs/DEPLOYMENT.md) for setup, secrets (`HUES_DOMAIN`,
-`HUES_ADMIN_PASSWORD`, `HUES_ADMIN_PATH`, …) and operations.
+`HUES_ALLOWED_CHANNELS`, …) and operations.
 
 A long-running server is required: the app holds a WebSocket connection to Twitch chat and pushes
 live updates to the overlay, which serverless platforms such as Vercel cannot do.
@@ -108,21 +108,21 @@ live updates to the overlay, which serverless platforms such as Vercel cannot do
 
 All configuration is via environment variables (see [`.env.example`](.env.example)):
 
-| Variable              | Default  | Purpose                                                     |
-| --------------------- | -------- | ----------------------------------------------------------- |
-| `ADMIN_PASSWORD`      | —        | Admin page password (12+ characters); set with `ADMIN_PATH` |
-| `ADMIN_PATH`          | —        | Secret URL segment: the admin page is `/admin/<ADMIN_PATH>` |
-| `INVITE_TTL_DAYS`     | `14`     | Days an unused invite code stays valid                      |
-| `SESSION_TTL_DAYS`    | `30`     | Days a sign-in lasts without use                            |
-| `ALLOWED_CHANNELS`    | —        | Comma-separated allow-list of Twitch channels               |
-| `MAX_ROOMS_PER_USER`  | `5`      | Games per account                                           |
-| `MAX_ROOMS`           | `500`    | Games per server                                            |
-| `ROOM_RETENTION_DAYS` | `90`     | Unplayed games are deleted after this long                  |
-| `DATA_DIR`            | `./data` | Location of the SQLite database (`hues.db`)                 |
-| `PORT`                | `8080`   | HTTP port                                                   |
-| `TRUST_PROXY`         | `false`  | Set behind a reverse proxy                                  |
-| `COOKIE_SECURE`       | auto     | `Secure` cookies; on by default when `NODE_ENV=production`  |
-| `LOG_LEVEL`           | `info`   | Pino log level                                              |
+| Variable              | Default  | Purpose                                                      |
+| --------------------- | -------- | ------------------------------------------------------------ |
+| `INTERNAL_API_TOKEN`  | —        | Enables the internal admin API for the dashboard (32+ chars) |
+| `INTERNAL_API_PORT`   | `9000`   | Port of the internal admin API; never exposed publicly       |
+| `INVITE_TTL_DAYS`     | `14`     | Days an unused invite code stays valid                       |
+| `SESSION_TTL_DAYS`    | `30`     | Days a sign-in lasts without use                             |
+| `ALLOWED_CHANNELS`    | —        | Comma-separated allow-list of Twitch channels                |
+| `MAX_ROOMS_PER_USER`  | `5`      | Games per account                                            |
+| `MAX_ROOMS`           | `500`    | Games per server                                             |
+| `ROOM_RETENTION_DAYS` | `90`     | Unplayed games are deleted after this long                   |
+| `DATA_DIR`            | `./data` | Location of the SQLite database (`hues.db`)                  |
+| `PORT`                | `8080`   | HTTP port                                                    |
+| `TRUST_PROXY`         | `false`  | Set behind a reverse proxy                                   |
+| `COOKIE_SECURE`       | auto     | `Secure` cookies; on by default when `NODE_ENV=production`   |
+| `LOG_LEVEL`           | `info`   | Pino log level                                               |
 
 ## Development
 

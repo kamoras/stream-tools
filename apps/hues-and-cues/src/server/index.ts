@@ -1,7 +1,7 @@
 import { pino } from 'pino';
 import { loadConfig } from './config.js';
 import { buildApp } from './http/app.js';
-import { AdminAuth } from './admin/admin-auth.js';
+import { buildInternalApi } from './http/internal-api.js';
 import { AuthService } from './auth/auth-service.js';
 import { InviteRepository } from './auth/invite-codes.js';
 import { SessionRepository } from './auth/session-repository.js';
@@ -33,10 +33,18 @@ async function main(): Promise<void> {
     transaction: (fn) => db.transaction(fn)(),
     logger,
   });
-  const adminAuth = new AdminAuth({ db, password: config.admin?.password, logger });
-  if (!config.admin) {
+  const internalApi = config.internalApi
+    ? buildInternalApi({
+        token: config.internalApi.token,
+        invites,
+        users,
+        inviteTtlMs: config.inviteTtlMs,
+        logger,
+      })
+    : undefined;
+  if (!internalApi) {
     logger.warn(
-      'ADMIN_PASSWORD/ADMIN_PATH are not set: the admin page is disabled, so no invite codes can be generated and nobody can sign up.',
+      'INTERNAL_API_TOKEN is not set: the admin dashboard cannot reach this app, so no invite codes can be generated and nobody can sign up.',
     );
   }
   const registry = new RoomRegistry({
@@ -61,11 +69,10 @@ async function main(): Promise<void> {
   chat.on('disconnected', announceChatStatus);
   chat.start();
 
-  const app = await buildApp({ config, auth, adminAuth, invites, users, registry, chat, logger });
+  const app = await buildApp({ config, auth, registry, chat, logger });
   const maintenanceTimer = setInterval(() => {
     registry.prune();
     auth.pruneExpired();
-    adminAuth.pruneExpired();
   }, MAINTENANCE_INTERVAL_MS);
   maintenanceTimer.unref();
 
@@ -83,6 +90,7 @@ async function main(): Promise<void> {
     clearInterval(maintenanceTimer);
     chat.stop();
     await app.close();
+    await internalApi?.close();
     registry.shutdown();
     db.close();
     logger.info('Shutdown complete');
@@ -93,6 +101,9 @@ async function main(): Promise<void> {
   }
 
   await app.listen({ host: config.host, port: config.port });
+  if (internalApi && config.internalApi) {
+    await internalApi.listen({ host: config.host, port: config.internalApi.port });
+  }
 }
 
 main().catch((error: unknown) => {

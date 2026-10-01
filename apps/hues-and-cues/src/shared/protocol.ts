@@ -224,7 +224,7 @@ export const newPasswordSchema = z
 export const registerRequestSchema = z.object({
   username: usernameSchema,
   password: newPasswordSchema,
-  /** Single-use code from an admin (see the admin page). */
+  /** Single-use code generated on the stream-tools admin dashboard. */
   inviteCode: z.string().trim().min(1, 'An invite code is required.').max(64),
 });
 export type RegisterRequest = z.input<typeof registerRequestSchema>;
@@ -249,16 +249,10 @@ export interface AuthUser {
 }
 
 // -----------------------------------------------------------------------------
-// Admin API (mounted under /admin/<ADMIN_PATH>/api)
+// Internal admin API (see server/http/internal-api.ts), used by apps/admin
 // -----------------------------------------------------------------------------
 
-/** `POST …/api/login` */
-export const adminLoginRequestSchema = z.object({
-  password: z.string().min(1).max(PASSWORD_MAX_LENGTH),
-});
-export type AdminLoginRequest = z.input<typeof adminLoginRequestSchema>;
-
-/** `POST …/api/invites` */
+/** `POST /invites` */
 export const createInviteRequestSchema = z.object({
   note: z.string().trim().max(100).optional(),
 });

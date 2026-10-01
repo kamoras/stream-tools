@@ -20,13 +20,13 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().min(1).max(65_535).default(8080),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   DATA_DIR: z.string().default('./data'),
-  /** Password for the admin page. With ADMIN_PATH, enables the admin area. */
-  ADMIN_PASSWORD: z.string().min(12, 'must be at least 12 characters').optional(),
-  /** Secret URL segment: the admin page lives at /admin/<ADMIN_PATH>. */
-  ADMIN_PATH: z
-    .string()
-    .regex(/^[A-Za-z0-9_-]{8,128}$/u, 'must be 8-128 letters, numbers, _ or -')
-    .optional(),
+  /**
+   * Shared secret for the internal admin API used by the stream-tools admin
+   * dashboard. When unset the internal API is not started.
+   */
+  INTERNAL_API_TOKEN: z.string().min(32, 'must be at least 32 characters').optional(),
+  /** Port of the internal admin API; never published through the reverse proxy. */
+  INTERNAL_API_PORT: z.coerce.number().int().min(1).max(65_535).default(9000),
   /** Days an unused invite code stays valid. */
   INVITE_TTL_DAYS: z.coerce.number().int().min(1).max(365).default(14),
   /** If set, only these Twitch channels may have games. Comma-separated. */
@@ -50,8 +50,8 @@ export interface AppConfig {
   readonly logLevel: string;
   readonly databaseFile: string;
   readonly publicDir: string;
-  /** Present only when both ADMIN_PASSWORD and ADMIN_PATH are set. */
-  readonly admin: { readonly password: string; readonly path: string } | undefined;
+  /** Present only when INTERNAL_API_TOKEN is set. */
+  readonly internalApi: { readonly token: string; readonly port: number } | undefined;
   readonly inviteTtlMs: number;
   readonly allowedChannels: readonly string[] | undefined;
   readonly trustProxy: boolean;
@@ -71,9 +71,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     throw new Error(`Invalid configuration:\n${details}`);
   }
   const values = parsed.data;
-  if ((values.ADMIN_PASSWORD === undefined) !== (values.ADMIN_PATH === undefined)) {
-    throw new Error('Invalid configuration:\n  ADMIN_PASSWORD and ADMIN_PATH must be set together');
-  }
   const allowed = values.ALLOWED_CHANNELS;
   return {
     env: values.NODE_ENV,
@@ -82,10 +79,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     logLevel: values.LOG_LEVEL,
     databaseFile: resolve(values.DATA_DIR, 'hues.db'),
     publicDir: resolve(values.PUBLIC_DIR),
-    admin:
-      values.ADMIN_PASSWORD !== undefined && values.ADMIN_PATH !== undefined
-        ? { password: values.ADMIN_PASSWORD, path: values.ADMIN_PATH }
-        : undefined,
+    internalApi:
+      values.INTERNAL_API_TOKEN === undefined
+        ? undefined
+        : { token: values.INTERNAL_API_TOKEN, port: values.INTERNAL_API_PORT },
     inviteTtlMs: values.INVITE_TTL_DAYS * DAY_MS,
     allowedChannels: allowed && allowed.length > 0 ? allowed : undefined,
     trustProxy: values.TRUST_PROXY,

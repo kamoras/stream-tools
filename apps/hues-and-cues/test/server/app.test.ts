@@ -2,14 +2,7 @@ import type { AddressInfo } from 'node:net';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
-import type {
-  AdminOverviewResponse,
-  CreateInviteResponse,
-  HostGameState,
-  RoomSummary,
-  ServerMessage,
-} from '../../src/shared/protocol.js';
-import { AdminAuth } from '../../src/server/admin/admin-auth.js';
+import type { HostGameState, RoomSummary, ServerMessage } from '../../src/shared/protocol.js';
 import { AuthService } from '../../src/server/auth/auth-service.js';
 import { InviteRepository } from '../../src/server/auth/invite-codes.js';
 import { SessionRepository } from '../../src/server/auth/session-repository.js';
@@ -107,10 +100,7 @@ class TestClient {
   }
 }
 
-const ADMIN = { password: 'admin password 123', path: 'secret-admin-path' };
-
 interface SetupOptions {
-  admin?: boolean;
   allowedChannels?: string[];
   maxRoomsPerUser?: number;
 }
@@ -137,7 +127,7 @@ describe('HTTP + WebSocket API', () => {
       logger: silentLogger,
       scryptParams: FAST_SCRYPT,
     });
-    const adminEnabled = options.admin ?? true;
+
     registry = new RoomRegistry({
       logger: silentLogger,
       store: new RoomStore(db),
@@ -154,17 +144,8 @@ describe('HTTP + WebSocket API', () => {
         env: 'test',
         cookieSecure: false,
         sessionTtlMs: 60_000,
-        admin: adminEnabled ? ADMIN : undefined,
-        inviteTtlMs: 24 * 60 * 60 * 1000,
       },
       auth,
-      adminAuth: new AdminAuth({
-        db,
-        password: adminEnabled ? ADMIN.password : undefined,
-        logger: silentLogger,
-      }),
-      invites,
-      users,
       registry,
       chat,
       logger: silentLogger,
@@ -371,114 +352,6 @@ describe('HTTP + WebSocket API', () => {
         inviteCode: code,
       });
       expect(reused.statusCode).toBe(403);
-    });
-  });
-
-  describe('admin area', () => {
-    const base = `/admin/${ADMIN.path}`;
-
-    const adminLogin = async (): Promise<string> => {
-      const response = await call('POST', `${base}/api/login`, { password: ADMIN.password });
-      expect(response.statusCode).toBe(204);
-      const cookie = response.cookies.find((c) => c.name === 'hc_admin');
-      expect(cookie).toMatchObject({ httpOnly: true, sameSite: 'Strict', path: '/' });
-      return `hc_admin=${cookie?.value ?? ''}`;
-    };
-
-    it('hides everything except the secret path', async () => {
-      await setup();
-      expect((await call('GET', '/admin/wrong-path/api/overview')).statusCode).toBe(404);
-      expect(
-        (await call('POST', '/admin/wrong-path/api/login', { password: ADMIN.password }))
-          .statusCode,
-      ).toBe(404);
-      expect((await call('GET', `${base}/api/overview`)).statusCode).toBe(401);
-    });
-
-    it('does not exist at all when not configured', async () => {
-      await setup({ admin: false });
-      expect(
-        (await call('POST', `${base}/api/login`, { password: ADMIN.password })).statusCode,
-      ).toBe(404);
-    });
-
-    it('rejects a wrong password', async () => {
-      await setup();
-      const response = await call('POST', `${base}/api/login`, { password: 'not the password' });
-      expect(response.statusCode).toBe(401);
-    });
-
-    it('generates single-use codes that let people sign up, and shows who used them', async () => {
-      await setup();
-      const admin = await adminLogin();
-
-      const created = await call('POST', `${base}/api/invites`, { note: 'for Sam' }, admin);
-      expect(created.statusCode).toBe(201);
-      const { code, invite: summary } = created.json<CreateInviteResponse>();
-      expect(code).toMatch(/^[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4}$/u);
-      expect(summary).toMatchObject({ note: 'for Sam', status: 'unused', hint: code.slice(0, 4) });
-
-      const signup = await call('POST', '/api/auth/register', {
-        username: 'sam',
-        password: 'a good password',
-        inviteCode: code,
-      });
-      expect(signup.statusCode).toBe(201);
-      const session = signup.cookies.find((c) => c.name === 'hc_session');
-      await call(
-        'POST',
-        '/api/rooms',
-        { channel: 'sams_channel' },
-        `hc_session=${session?.value ?? ''}`,
-      );
-
-      const overview = (
-        await call('GET', `${base}/api/overview`, undefined, admin)
-      ).json<AdminOverviewResponse>();
-      expect(overview.inviteTtlDays).toBe(1);
-      expect(overview.invites).toEqual([
-        expect.objectContaining({ id: summary.id, status: 'used', usedBy: 'sam' }),
-      ]);
-      expect(overview.users).toEqual([
-        expect.objectContaining({
-          username: 'sam',
-          channels: ['sams_channel'],
-          lastLoginAt: expect.any(Number) as number,
-        }),
-      ]);
-      // The full code is never returned again.
-      expect(JSON.stringify(overview)).not.toContain(code);
-    });
-
-    it('revokes unused codes', async () => {
-      await setup();
-      const admin = await adminLogin();
-      const { code, invite: summary } = (
-        await call('POST', `${base}/api/invites`, {}, admin)
-      ).json<CreateInviteResponse>();
-      const revokeUrl = `${base}/api/invites/${String(summary.id)}`;
-      expect((await call('DELETE', revokeUrl, undefined, admin)).statusCode).toBe(204);
-      expect((await call('DELETE', revokeUrl, undefined, admin)).statusCode).toBe(404);
-      const signup = await call('POST', '/api/auth/register', {
-        username: 'late',
-        password: 'a good password',
-        inviteCode: code,
-      });
-      expect(signup.statusCode).toBe(403);
-    });
-
-    it('signs out', async () => {
-      await setup();
-      const admin = await adminLogin();
-      expect((await call('POST', `${base}/api/logout`, undefined, admin)).statusCode).toBe(204);
-      expect((await call('GET', `${base}/api/overview`, undefined, admin)).statusCode).toBe(401);
-    });
-
-    it('is not usable with a regular user session', async () => {
-      await setup();
-      const user = await register('regular');
-      expect((await call('GET', `${base}/api/overview`, undefined, user)).statusCode).toBe(401);
-      expect((await call('POST', `${base}/api/invites`, {}, user)).statusCode).toBe(401);
     });
   });
 
