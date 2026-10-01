@@ -4,7 +4,7 @@
 # Runs on the build machine's own platform: the output (dist/) is plain
 # JavaScript, so it doesn't need building per target. Building it under ARM
 # emulation is slow and can crash Node outright.
-FROM --platform=$BUILDPLATFORM node:22-alpine AS build
+FROM --platform=$BUILDPLATFORM node:26-alpine AS build
 WORKDIR /app
 # better-sqlite3 falls back to compiling from source when no prebuilt binary fits.
 RUN apk add --no-cache python3 make g++
@@ -15,14 +15,14 @@ COPY src ./src
 RUN npm run build
 
 # ---- Production dependencies -------------------------------------------------
-FROM node:22-alpine AS deps
+FROM node:26-alpine AS deps
 WORKDIR /app
 RUN apk add --no-cache python3 make g++
 COPY package.json package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev --no-audit --no-fund
 
 # ---- Runtime -----------------------------------------------------------------
-FROM node:22-alpine AS runtime
+FROM node:26-alpine AS runtime
 LABEL org.opencontainers.image.source="https://github.com/kamoras/stream-tools" \
       org.opencontainers.image.description="Hues & Cues colour-guessing game for Twitch" 
 ENV NODE_ENV=production \
